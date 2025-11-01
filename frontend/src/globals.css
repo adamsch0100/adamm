@@ -1,0 +1,189 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Typography Scale */
+  h1 {
+    @apply text-5xl font-bold tracking-tight;
+  }
+
+  h2 {
+    @apply text-3xl font-bold tracking-tight;
+  }
+
+  h3 {
+    @apply text-xl font-semibold tracking-tight;
+  }
+
+  /* Enhanced line heights */
+  h1,
+  h2,
+  h3 {
+    @apply leading-tight;
+  }
+
+  p {
+    @apply leading-relaxed;
+  }
+
+  body {
+    @apply bg-gray-900;
+  }
+}
+
+@layer components {
+  /* Glassmorphism effects - ENHANCED */
+  .glass {
+    @apply bg-white/8 backdrop-blur-xl border border-white/30 rounded-2xl shadow-2xl;
+  }
+
+  .glass-sm {
+    @apply bg-white/6 backdrop-blur-lg border border-white/20 rounded-xl shadow-xl;
+  }
+
+  /* Gradient backgrounds - VIBRANT */
+  .gradient-primary {
+    @apply bg-gradient-to-br from-blue-500 via-blue-600 to-purple-700;
+  }
+
+  .gradient-accent {
+    @apply bg-gradient-to-br from-purple-600 via-pink-500 to-rose-600;
+  }
+
+  .gradient-subtle {
+    @apply bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900;
+  }
+
+  /* Additional vibrant gradients */
+  .gradient-green {
+    @apply bg-gradient-to-br from-emerald-500 to-teal-600;
+  }
+
+  .gradient-orange {
+    @apply bg-gradient-to-br from-orange-500 to-rose-600;
+  }
+
+  .gradient-pink {
+    @apply bg-gradient-to-br from-pink-500 to-rose-600;
+  }
+
+  /* Gradient text - MORE VIBRANT */
+  .gradient-text {
+    @apply bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent;
+  }
+
+  /* Card improvements */
+  .card-glass {
+    @apply glass p-6 lg:p-8;
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-2xl hover:scale-105;
+  }
+
+  /* Button improvements */
+  .btn-glass {
+    @apply glass px-6 py-3 font-semibold transition-all duration-300 hover:bg-white/15 hover:shadow-lg hover:border-white/40 text-white;
+  }
+
+  .btn-gradient {
+    @apply gradient-primary text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300 hover:shadow-2xl hover:scale-105 hover:shadow-blue-500/50;
+  }
+
+  /* Form improvements */
+  .input-glass {
+    @apply glass-sm px-4 py-3 text-white placeholder-gray-400 transition-all duration-200 focus:bg-white/12 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent;
+  }
+
+  .label-glass {
+    @apply text-sm font-semibold text-gray-100 tracking-wide;
+  }
+
+  /* Stat card styling */
+  .stat-card {
+    @apply glass rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 hover:bg-white/12;
+  }
+
+  /* Platform card styling */
+  .platform-card {
+    @apply glass rounded-2xl p-5 flex flex-col items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-2xl hover:bg-white/15;
+  }
+}
+
+@layer utilities {
+  /* Animation utilities */
+  .animate-fade-in {
+    @apply animate-in fade-in duration-500;
+  }
+
+  .animate-slide-up {
+    @apply animate-in slide-in-from-bottom-6 duration-500;
+  }
+
+  .animate-slide-down {
+    @apply animate-in slide-in-from-top-6 duration-500;
+  }
+
+  /* Blur effects */
+  .blur-sm-glass {
+    backdrop-filter: blur(8px);
+  }
+
+  .blur-md-glass {
+    backdrop-filter: blur(16px);
+  }
+
+  .blur-lg-glass {
+    backdrop-filter: blur(32px);
+  }
+
+  /* Position utilities */
+  .absolute-center {
+    @apply absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2;
+  }
+
+  .absolute-center-x {
+    @apply absolute left-1/2 -translate-x-1/2;
+  }
+
+  /* Gradient borders */
+  .border-gradient {
+    @apply border-2 border-transparent bg-clip-padding;
+    background-image: linear-gradient(white, white), linear-gradient(90deg, #0ea5e9, #a855f7, #ec4899);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+  }
+}
+
+/* Smooth transitions for all interactive elements */
+* {
+  @apply transition-colors duration-200;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  @apply transition-all duration-300;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgb(15, 23, 42);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgb(59, 130, 246), rgb(168, 85, 247));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgb(96, 165, 250), rgb(196, 124, 255));
+}

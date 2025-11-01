@@ -1,0 +1,325 @@
+{
+  "name": "Automated Warmup Schedule",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 */6 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "schedule-trigger-1",
+      "notes": "Runs every 6 hours (4x daily)"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/social_accounts",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {
+          "qs": {
+            "parameters": [
+              {
+                "name": "select",
+                "value": "id,platform,cloud_phone_id,username,status"
+              },
+              {
+                "name": "status",
+                "value": "eq.active"
+              },
+              {
+                "name": "warmup_completed",
+                "value": "eq.false"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Get Active Accounts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [450, 300],
+      "id": "get-accounts-1",
+      "notes": "Fetch all active accounts needing warmup"
+    },
+    {
+      "parameters": {
+        "mode": "multiplex"
+      },
+      "name": "Split Accounts",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "id": "split-accounts-1"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.MCP_SERVER_URL }}/api/warmup/execute",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "cloudPhoneId",
+              "value": "={{ $json.cloud_phone_id }}"
+            },
+            {
+              "name": "platform",
+              "value": "={{ $json.platform }}"
+            },
+            {
+              "name": "accountId",
+              "value": "={{ $json.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Execute Warmup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 300],
+      "id": "execute-warmup-1",
+      "notes": "Run warmup session via MCP server"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Check Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "id": "check-success-1"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/social_accounts",
+        "method": "PATCH",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "warmup_days",
+              "value": "={{ $json.warmup_days + 1 }}"
+            },
+            {
+              "name": "last_warmup",
+              "value": "={{ $now.toISO() }}"
+            },
+            {
+              "name": "warmup_completed",
+              "value": "={{ $json.warmup_days + 1 >= 14 }}"
+            }
+          ]
+        },
+        "options": {
+          "qs": {
+            "parameters": [
+              {
+                "name": "id",
+                "value": "eq.={{ $json.id }}"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Update Success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 200],
+      "id": "update-success-1",
+      "notes": "Increment warmup days, mark complete after 14 days"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/warmup_logs",
+        "method": "POST",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "account_id",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "platform",
+              "value": "={{ $json.platform }}"
+            },
+            {
+              "name": "actions_performed",
+              "value": "={{ $json.warmup.actionsPerformed }}"
+            },
+            {
+              "name": "duration",
+              "value": "={{ $json.warmup.duration }}"
+            },
+            {
+              "name": "success",
+              "value": false
+            },
+            {
+              "name": "error_message",
+              "value": "={{ $json.error }}"
+            }
+          ]
+        }
+      },
+      "name": "Log Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 400],
+      "id": "log-error-1",
+      "notes": "Log failed warmup attempt"
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "name": "Wait Between Accounts",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "id": "wait-1",
+      "notes": "30 second delay to avoid overwhelming devices"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Active Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Accounts": {
+      "main": [
+        [
+          {
+            "node": "Split Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Accounts": {
+      "main": [
+        [
+          {
+            "node": "Execute Warmup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Warmup": {
+      "main": [
+        [
+          {
+            "node": "Check Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Success": {
+      "main": [
+        [
+          {
+            "node": "Update Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Success": {
+      "main": [
+        [
+          {
+            "node": "Wait Between Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Error": {
+      "main": [
+        [
+          {
+            "node": "Wait Between Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Between Accounts": {
+      "main": [
+        [
+          {
+            "node": "Split Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T10:00:00.000Z",
+  "versionId": "1"
+}
+
+
+
+
+
+
+
+
+
+
+
+
+

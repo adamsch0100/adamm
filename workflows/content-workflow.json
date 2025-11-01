@@ -1,0 +1,594 @@
+{
+  "name": "TikTok Multi-Video Content Creation & Posting",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 */12 * * *"
+            }
+          ]
+        }
+      },
+      "id": "content-cron-trigger",
+      "name": "Every 12 Hours Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 400],
+      "notes": "Triggers content creation and posting every 12 hours"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/crypto/trending",
+        "options": {
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "limit",
+                "value": "5"
+              }
+            ]
+          }
+        }
+      },
+      "id": "fetch-trending-crypto",
+      "name": "Fetch Trending Crypto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 400],
+      "notes": "Gets top 5 trending cryptocurrencies from CoinMarketCap"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract the top trending crypto topic\nconst trending = $input.item.json.trending;\n\nif (!trending || trending.length === 0) {\n  throw new Error('No trending crypto data available');\n}\n\n// Get the first (most trending) crypto\nconst topCrypto = trending[0];\n\n// Create comprehensive topic object for campaign generation\nconst cryptoTopic = {\n  name: topCrypto.name,\n  symbol: topCrypto.symbol,\n  price: topCrypto.quote?.USD?.price || 0,\n  percentChange24h: topCrypto.quote?.USD?.percent_change_24h || 0,\n  marketCap: topCrypto.quote?.USD?.market_cap || 0,\n  volume24h: topCrypto.quote?.USD?.volume_24h || 0\n};\n\nconsole.log('Selected trending crypto:', cryptoTopic.name, '- Price:', cryptoTopic.price);\n\nreturn {\n  json: { cryptoTopic }\n};"
+      },
+      "id": "extract-top-trend",
+      "name": "Extract Top Trend",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 400],
+      "notes": "Extracts the most trending cryptocurrency"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/content/generate-full-campaign",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"cryptoTopic\": {{ JSON.stringify($json.cryptoTopic) }}\n}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "generate-campaign",
+      "name": "Generate Full Campaign",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 400],
+      "notes": "Generates 10 unique videos + captions via unified endpoint (may take 20-50 mins)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-campaign-success",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "check-videos-count",
+              "leftValue": "={{ $json.videos?.length || 0 }}",
+              "rightValue": 10,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "verify-campaign",
+      "name": "Verify Campaign Generated",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1050, 400],
+      "notes": "Checks if campaign with 10 videos was generated"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "email": "={{$env.ALERT_EMAIL}}",
+        "subject": "=Campaign Generation Failed",
+        "message": "=Campaign generation failed for {{ $('Extract Top Trend').item.json.cryptoTopic.name }}.\n\nError details:\n{{ JSON.stringify($json, null, 2) }}\n\nTime: {{ $now }}\n\nWorkflow will retry in 12 hours.",
+        "options": {}
+      },
+      "id": "send-campaign-error",
+      "name": "Campaign Failed Alert",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1250, 550],
+      "notes": "Alerts if campaign generation fails"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Poll all video statuses until complete\nconst campaign = $input.item.json;\nconst videos = campaign.videos;\nconst maxWaitMinutes = 60; // Max 1 hour\nconst pollIntervalSeconds = 10;\n\nconst completedVideos = [];\nconst startTime = Date.now();\n\nfor (const video of videos) {\n  let videoComplete = false;\n  let attempts = 0;\n  const maxAttempts = (maxWaitMinutes * 60) / pollIntervalSeconds;\n  \n  while (!videoComplete && attempts < maxAttempts) {\n    // Poll video status\n    const statusResponse = await this.helpers.httpRequest({\n      method: 'GET',\n      url: `http://localhost:3000/api/openai/video-status/${video.videoId}`\n    });\n    \n    if (statusResponse.status === 'completed') {\n      console.log(`Video ${video.variation} completed!`);\n      \n      // Download the video\n      const downloadResponse = await this.helpers.httpRequest({\n        method: 'GET',\n        url: `http://localhost:3000/api/openai/video-download/${video.videoId}`\n      });\n      \n      completedVideos.push({\n        videoId: video.videoId,\n        videoUrl: downloadResponse.videoUrl,\n        style: video.style,\n        variation: video.variation\n      });\n      \n      videoComplete = true;\n    } else if (statusResponse.status === 'failed') {\n      throw new Error(`Video ${video.variation} generation failed: ${statusResponse.error}`);\n    } else {\n      // Still processing, wait and retry\n      console.log(`Video ${video.variation} status: ${statusResponse.status} (${statusResponse.progress || 0}%)`);\n      await new Promise(resolve => setTimeout(resolve, pollIntervalSeconds * 1000));\n      attempts++;\n    }\n  }\n  \n  if (!videoComplete) {\n    throw new Error(`Video ${video.variation} timed out after ${maxWaitMinutes} minutes`);\n  }\n}\n\nconst elapsedMinutes = Math.round((Date.now() - startTime) / 60000);\nconsole.log(`All 10 videos completed in ${elapsedMinutes} minutes`);\n\nreturn {\n  json: {\n    videos: completedVideos,\n    captions: campaign.captions,\n    cryptoTopic: campaign.cryptoTopic,\n    script: campaign.script,\n    strategy: campaign.strategy,\n    generationTime: elapsedMinutes\n  }\n};"
+      },
+      "id": "poll-and-download-videos",
+      "name": "Poll & Download All Videos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300],
+      "notes": "Polls all 10 videos until complete and downloads them"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/morelogin/instances",
+        "options": {}
+      },
+      "id": "fetch-vmos-devices",
+      "name": "Fetch VMOS Devices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1450, 300],
+      "notes": "Gets all 10 virtual phone instances"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Match videos with devices (1:1 mapping)\nconst campaign = $('Poll & Download All Videos').item.json;\nconst devices = $input.item.json.instances || [];\n\nif (devices.length < 10) {\n  throw new Error(`Only ${devices.length} devices available, need 10`);\n}\n\nconst deviceAssignments = [];\n\nfor (let i = 0; i < 10; i++) {\n  deviceAssignments.push({\n    deviceId: devices[i].id || devices[i].instance_id,\n    deviceName: devices[i].name || `Device ${i + 1}`,\n    videoId: campaign.videos[i].videoId,\n    videoUrl: campaign.videos[i].videoUrl,\n    videoStyle: campaign.videos[i].style,\n    caption: campaign.captions[i],\n    cryptoName: campaign.cryptoTopic,\n    strategy: campaign.strategy,\n    variation: i + 1\n  });\n}\n\nconsole.log(`Assigned ${deviceAssignments.length} unique videos to devices`);\n\nreturn deviceAssignments.map(assignment => ({ json: assignment }));"
+      },
+      "id": "match-videos-to-devices",
+      "name": "Match Videos to Devices",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300],
+      "notes": "Creates 1:1 mapping of videos to devices (Device 1 = Video 1, etc.)"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "loop-device-assignments",
+      "name": "Loop Device Assignments",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1850, 300],
+      "notes": "Iterates through each device assignment"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/morelogin/upload",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"cloudPhoneId\": \"{{ $json.deviceId }}\",\n  \"fileUrl\": \"{{ $json.videoUrl }}\",\n  \"fileName\": \"tiktok_{{ $json.cryptoName }}_v{{ $json.variation }}_{{ $now.toFormat('yyyyMMdd_HHmmss') }}.mp4\"\n}",
+        "options": {}
+      },
+      "id": "upload-video-to-device",
+      "name": "Upload Video to Device",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2050, 300],
+      "notes": "Uploads unique video to this specific device"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-upload-success",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "verify-upload",
+      "name": "Verify Upload",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2250, 300],
+      "notes": "Checks if video uploaded successfully"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "device-info",
+              "name": "deviceId",
+              "value": "={{ $('Loop Device Assignments').item.json.deviceId }}",
+              "type": "string"
+            },
+            {
+              "id": "file-path",
+              "name": "videoFilePath",
+              "value": "={{ $json.filePath || '/sdcard/Download/' + $('Upload Video to Device').item.json.fileName }}",
+              "type": "string"
+            },
+            {
+              "id": "post-caption",
+              "name": "caption",
+              "value": "={{ $('Loop Device Assignments').item.json.caption }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-posting-vars",
+      "name": "Prepare Posting Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [2450, 200],
+      "notes": "Sets up variables for TikTok posting"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/tiktok/post-sequence",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"cloudPhoneId\": \"{{ $json.deviceId }}\",\n  \"videoFilePath\": \"{{ $json.videoFilePath }}\",\n  \"caption\": \"{{ $json.caption }}\",\n  \"hashtags\": [],\n  \"screenWidth\": 1080,\n  \"screenHeight\": 1920\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "post-to-tiktok",
+      "name": "Post to TikTok",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2650, 200],
+      "notes": "Executes TikTok posting sequence via touch automation"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "result-device",
+              "name": "deviceId",
+              "value": "={{ $('Loop Device Assignments').item.json.deviceId }}",
+              "type": "string"
+            },
+            {
+              "id": "result-device-name",
+              "name": "deviceName",
+              "value": "={{ $('Loop Device Assignments').item.json.deviceName }}",
+              "type": "string"
+            },
+            {
+              "id": "result-video",
+              "name": "videoStyle",
+              "value": "={{ $('Loop Device Assignments').item.json.videoStyle }}",
+              "type": "string"
+            },
+            {
+              "id": "result-variation",
+              "name": "variation",
+              "value": "={{ $('Loop Device Assignments').item.json.variation }}",
+              "type": "number"
+            },
+            {
+              "id": "result-caption",
+              "name": "caption",
+              "value": "={{ $('Loop Device Assignments').item.json.caption }}",
+              "type": "string"
+            },
+            {
+              "id": "result-success",
+              "name": "posted",
+              "value": "={{ $json.success || false }}",
+              "type": "boolean"
+            },
+            {
+              "id": "result-time",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-posting-result",
+      "name": "Log Posting Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [2850, 200],
+      "notes": "Logs the posting result for this device"
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "id": "delay-between-posts",
+      "name": "Wait 5 Seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3050, 200],
+      "notes": "Delay between posts to avoid detection"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Handle upload failure\nconst assignment = $('Loop Device Assignments').item.json;\n\nconsole.error(`Upload failed for device ${assignment.deviceName}`);\n\nreturn {\n  json: {\n    deviceId: assignment.deviceId,\n    deviceName: assignment.deviceName,\n    variation: assignment.variation,\n    error: 'Upload failed',\n    posted: false,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "handle-upload-failure",
+      "name": "Upload Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2450, 400],
+      "notes": "Handles upload failure for this device"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Aggregate all posting results\nconst results = $input.all();\nconst campaign = $('Poll & Download All Videos').item.json;\n\nconst successCount = results.filter(r => r.json.posted === true).length;\nconst failCount = results.filter(r => r.json.posted === false).length;\n\nconst summary = {\n  cryptoTopic: campaign.cryptoTopic,\n  strategy: campaign.strategy,\n  generationTime: campaign.generationTime,\n  totalDevices: results.length,\n  successfulPosts: successCount,\n  failedPosts: failCount,\n  successRate: `${Math.round((successCount / results.length) * 100)}%`,\n  completedAt: new Date().toISOString(),\n  results: results.map(r => r.json)\n};\n\nconsole.log('Campaign complete:', summary);\n\nreturn {\n  json: summary\n};"
+      },
+      "id": "aggregate-results",
+      "name": "Aggregate Campaign Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3250, 200],
+      "notes": "Summarizes all posting results",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "email": "={{$env.ALERT_EMAIL}}",
+        "subject": "=✅ TikTok Campaign Complete: {{ $json.cryptoTopic }}",
+        "message": "=Campaign successfully completed!\n\n📊 Summary:\n- Topic: {{ $json.cryptoTopic }}\n- Strategy: {{ $json.strategy }}\n- Generation Time: {{ $json.generationTime }} minutes\n- Total Posts: {{ $json.totalDevices }}\n- Successful: {{ $json.successfulPosts }}\n- Failed: {{ $json.failedPosts }}\n- Success Rate: {{ $json.successRate }}\n\n🎬 Video Details:\n{{ $json.results.map(r => `- ${r.deviceName}: ${r.videoStyle} (Variation ${r.variation}) - ${r.posted ? '✅ Posted' : '❌ Failed'}`).join('\\n') }}\n\nCompleted at: {{ $json.completedAt }}",
+        "options": {}
+      },
+      "id": "send-success-summary",
+      "name": "Send Success Summary",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [3450, 200],
+      "notes": "Sends campaign completion summary email"
+    }
+  ],
+  "connections": {
+    "Every 12 Hours Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Trending Crypto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Trending Crypto": {
+      "main": [
+        [
+          {
+            "node": "Extract Top Trend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Top Trend": {
+      "main": [
+        [
+          {
+            "node": "Generate Full Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Full Campaign": {
+      "main": [
+        [
+          {
+            "node": "Verify Campaign Generated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Campaign Generated": {
+      "main": [
+        [
+          {
+            "node": "Poll & Download All Videos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Campaign Failed Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll & Download All Videos": {
+      "main": [
+        [
+          {
+            "node": "Fetch VMOS Devices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch VMOS Devices": {
+      "main": [
+        [
+          {
+            "node": "Match Videos to Devices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Videos to Devices": {
+      "main": [
+        [
+          {
+            "node": "Loop Device Assignments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Device Assignments": {
+      "main": [
+        [
+          {
+            "node": "Upload Video to Device",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Aggregate Campaign Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Video to Device": {
+      "main": [
+        [
+          {
+            "node": "Verify Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Upload": {
+      "main": [
+        [
+          {
+            "node": "Prepare Posting Variables",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Upload Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Posting Variables": {
+      "main": [
+        [
+          {
+            "node": "Post to TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to TikTok": {
+      "main": [
+        [
+          {
+            "node": "Log Posting Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Posting Result": {
+      "main": [
+        [
+          {
+            "node": "Wait 5 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 5 Seconds": {
+      "main": [
+        [
+          {
+            "node": "Loop Device Assignments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Failed": {
+      "main": [
+        [
+          {
+            "node": "Wait 5 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Campaign Results": {
+      "main": [
+        [
+          {
+            "node": "Send Success Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T00:00:00.000Z",
+  "versionId": "2.0.0"
+}

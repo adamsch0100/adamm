@@ -1,0 +1,573 @@
+{
+  "name": "TikTok Account Warm-Up (MoreLogin)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8,18 * * *"
+            }
+          ]
+        }
+      },
+      "id": "warmup-trigger",
+      "name": "Twice Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "notes": "Triggers at 8am and 6pm daily for account warm-up"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/morelogin/instances",
+        "options": {}
+      },
+      "id": "fetch-instances",
+      "name": "Fetch Cloud Phones",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300],
+      "notes": "Get list of all MoreLogin cloud phone instances"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "instances",
+        "options": {}
+      },
+      "id": "loop-devices",
+      "name": "Loop Each Device",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "notes": "Process each cloud phone one by one"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/morelogin/poweron",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"cloudPhoneId\": \"{{ $json.id }}\"\n}",
+        "options": {}
+      },
+      "id": "power-on",
+      "name": "Power On Device",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 300],
+      "notes": "Start the cloud phone instance"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Wait 120 seconds for device to boot (matching test script)\nawait new Promise(resolve => setTimeout(resolve, 120000));\nreturn {\n  json: {\n    cloudPhoneId: $input.item.json.id,\n    message: 'Device booted'\n  }\n};"
+      },
+      "id": "wait-boot",
+      "name": "Wait for Boot (120s)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300],
+      "notes": "Wait 120s for device to fully boot"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/morelogin/adb/enable",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"cloudPhoneIds\": [\"{{ $json.cloudPhoneId }}\"]\n}",
+        "options": {}
+      },
+      "id": "enable-adb",
+      "name": "Enable ADB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 300],
+      "notes": "Enable ADB debugging for automation"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Wait 60 seconds for ADB daemon to fully start\nawait new Promise(resolve => setTimeout(resolve, 60000));\nreturn {\n  json: {\n    cloudPhoneId: $input.item.json.cloudPhoneId,\n    message: 'ADB daemon started'\n  }\n};"
+      },
+      "id": "wait-adb",
+      "name": "Wait for ADB (60s)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 300],
+      "notes": "Wait 60s for ADB daemon to start"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Verify ADB connection with retries (matching test script)\nconst cloudPhoneId = $input.item.json.cloudPhoneId;\nconst axios = require('axios');\nconst maxAttempts = 6;\nlet attempt = 0;\nlet adbReady = false;\n\nwhile (!adbReady && attempt < maxAttempts) {\n  attempt++;\n  \n  try {\n    const response = await axios.post('http://localhost:3000/api/morelogin/adb/check', {\n      cloudPhoneId\n    });\n    \n    if (response.data.connected) {\n      adbReady = true;\n      return {\n        json: {\n          cloudPhoneId,\n          adbDevice: response.data.device,\n          message: `ADB verified on attempt ${attempt}`\n        }\n      };\n    } else {\n      if (attempt < maxAttempts) {\n        await new Promise(resolve => setTimeout(resolve, 10000));\n      }\n    }\n  } catch (error) {\n    if (attempt < maxAttempts) {\n      await new Promise(resolve => setTimeout(resolve, 10000));\n    }\n  }\n}\n\nif (!adbReady) {\n  throw new Error(`ADB connection failed after ${maxAttempts} attempts`);\n}\n\nreturn { json: { cloudPhoneId, error: 'ADB failed' } };"
+      },
+      "id": "verify-adb",
+      "name": "Verify ADB Connection",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300],
+      "notes": "Verify ADB with 6 retry attempts, 10s delay each"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/tiktok/start",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"cloudPhoneId\": \"{{ $json.cloudPhoneId }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "start-tiktok",
+      "name": "Start TikTok",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1850, 300],
+      "notes": "Launch TikTok app with 30s timeout"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Wait 5 seconds for app to load\nawait new Promise(resolve => setTimeout(resolve, 5000));\nreturn {\n  json: {\n    cloudPhoneId: $input.item.json.cloudPhoneId,\n    message: 'TikTok loaded'\n  }\n};"
+      },
+      "id": "wait-app-load",
+      "name": "Wait for App Load (5s)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2050, 300],
+      "notes": "Wait for TikTok to fully load"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Generate random parameters for main feed engagement\nreturn {\n  json: {\n    cloudPhoneId: $input.item.json.cloudPhoneId,\n    scrollCount: Math.floor(Math.random() * 5) + 8,\n    likeRate: Math.floor(Math.random() * 21) + 30\n  }\n};"
+      },
+      "id": "random-main-feed-params",
+      "name": "Random Main Feed Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2250, 300],
+      "notes": "Generate random scroll count (8-12) and like rate (30-50%)"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Main feed engagement with random scrolls and likes\nconst cloudPhoneId = $input.item.json.cloudPhoneId;\nconst scrollCount = $input.item.json.scrollCount;\nconst likeRate = $input.item.json.likeRate;\nconst axios = require('axios');\nconst actions = [];\n\nfor (let i = 0; i < scrollCount; i++) {\n  // Scroll feed\n  await axios.post('http://localhost:3000/api/tiktok/action', {\n    cloudPhoneId,\n    action: 'scroll_feed'\n  });\n  actions.push(`Scroll ${i+1}`);\n  \n  // Random like based on session's like rate\n  if (Math.random() * 100 <= likeRate) {\n    await axios.post('http://localhost:3000/api/tiktok/action', {\n      cloudPhoneId,\n      action: 'like_video'\n    });\n    actions.push(`Like ${i+1}`);\n  }\n}\n\nreturn {\n  json: {\n    cloudPhoneId,\n    actions,\n    scrollCount,\n    likeRate,\n    message: `Main feed: ${scrollCount} scrolls with ${likeRate}% like rate`\n  }\n};"
+      },
+      "id": "main-feed-engagement",
+      "name": "Main Feed Engagement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2450, 300],
+      "notes": "Scroll and like with random counts (MCP server adds 3-15s delays)"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/utils/random-crypto-topic",
+        "options": {}
+      },
+      "id": "get-crypto-topic-1",
+      "name": "Get Random Topic 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2650, 300],
+      "notes": "Get first random crypto topic for search"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Search flow 1: tap search, type, enter, explore\nconst cloudPhoneId = $input.item.json.cloudPhoneId;\nconst topic = $input.item.json.topic;\nconst axios = require('axios');\nconst searchNum = 1;\n\n// Tap search icon\nawait axios.post('http://localhost:3000/api/tiktok/action', {\n  cloudPhoneId,\n  action: 'tap_search'\n});\n\n// Type search term (word-by-word with delays)\nawait axios.post('http://localhost:3000/api/tiktok/action', {\n  cloudPhoneId,\n  action: 'type_text',\n  params: { text: topic }\n});\n\n// Tap search enter\nawait axios.post('http://localhost:3000/api/tiktok/action', {\n  cloudPhoneId,\n  action: 'tap_search_enter'\n});\n\n// Alternate: Search 1 = Users, Search 2 = Videos\nif (searchNum === 1) {\n  // Users tab\n  await axios.post('http://localhost:3000/api/tiktok/action', {\n    cloudPhoneId,\n    action: 'tap_search_tab',\n    params: { tab: 'Users' }\n  });\n  \n  // Follow 2-3 random users\n  const followCount = Math.floor(Math.random() * 2) + 2;\n  for (let i = 1; i <= followCount; i++) {\n    await axios.post('http://localhost:3000/api/tiktok/action', {\n      cloudPhoneId,\n      action: 'tap_follow_button',\n      params: { position: i }\n    });\n    \n    // Scroll between follows (except last)\n    if (i < followCount) {\n      await axios.post('http://localhost:3000/api/tiktok/action', {\n        cloudPhoneId,\n        action: 'scroll_users'\n      });\n    }\n  }\n  \n  // Final scroll\n  await axios.post('http://localhost:3000/api/tiktok/action', {\n    cloudPhoneId,\n    action: 'scroll_users'\n  });\n}\n\n// Go back to main feed (2 backs)\nawait axios.post('http://localhost:3000/api/tiktok/action', {\n  cloudPhoneId,\n  action: 'tap_back'\n});\nawait axios.post('http://localhost:3000/api/tiktok/action', {\n  cloudPhoneId,\n  action: 'tap_back'\n});\n\nreturn {\n  json: {\n    cloudPhoneId,\n    topic,\n    message: `Search 1 complete: ${topic}`\n  }\n};"
+      },
+      "id": "search-flow-1",
+      "name": "Search & Explore 1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2850, 300],
+      "notes": "Search crypto topic, explore Users tab, follow 2-3"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/utils/random-crypto-topic",
+        "options": {}
+      },
+      "id": "get-crypto-topic-2",
+      "name": "Get Random Topic 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [3050, 300],
+      "notes": "Get second random crypto topic"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Search flow 2: tap search, type, enter, explore videos\nconst cloudPhoneId = $input.item.json.cloudPhoneId;\nconst topic = $input.item.json.topic;\nconst axios = require('axios');\nconst searchNum = 2;\n\n// Tap search icon\nawait axios.post('http://localhost:3000/api/tiktok/action', {\n  cloudPhoneId,\n  action: 'tap_search'\n});\n\n// Type search term\nawait axios.post('http://localhost:3000/api/tiktok/action', {\n  cloudPhoneId,\n  action: 'type_text',\n  params: { text: topic }\n});\n\n// Tap search enter\nawait axios.post('http://localhost:3000/api/tiktok/action', {\n  cloudPhoneId,\n  action: 'tap_search_enter'\n});\n\n// Videos tab\nawait axios.post('http://localhost:3000/api/tiktok/action', {\n  cloudPhoneId,\n  action: 'tap_search_tab',\n  params: { tab: 'Videos' }\n});\n\n// Tap first video result\nawait axios.post('http://localhost:3000/api/tiktok/action', {\n  cloudPhoneId,\n  action: 'tap_video_result',\n  params: { position: 1 }\n});\n\n// Watch video for 5 seconds (not handled by MCP server delay)\nawait new Promise(resolve => setTimeout(resolve, 5000));\n\n// Go back to main feed (2 backs)\nawait axios.post('http://localhost:3000/api/tiktok/action', {\n  cloudPhoneId,\n  action: 'tap_back'\n});\nawait axios.post('http://localhost:3000/api/tiktok/action', {\n  cloudPhoneId,\n  action: 'tap_back'\n});\n\nreturn {\n  json: {\n    cloudPhoneId,\n    topic,\n    message: `Search 2 complete: ${topic}`\n  }\n};"
+      },
+      "id": "search-flow-2",
+      "name": "Search & Explore 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3250, 300],
+      "notes": "Search crypto topic, explore Videos tab, watch first result"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Return to home feed (2 backs from search)\nconst cloudPhoneId = $input.item.json.cloudPhoneId;\nconst axios = require('axios');\n\nawait axios.post('http://localhost:3000/api/tiktok/action', {\n  cloudPhoneId,\n  action: 'tap_back'\n});\nawait axios.post('http://localhost:3000/api/tiktok/action', {\n  cloudPhoneId,\n  action: 'tap_back'\n});\n\nreturn {\n  json: {\n    cloudPhoneId,\n    message: 'Back on home feed'\n  }\n};"
+      },
+      "id": "return-home",
+      "name": "Return to Home",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3450, 300],
+      "notes": "Go back to home feed with 2 backs"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Generate random final scroll count (3-5)\nreturn {\n  json: {\n    cloudPhoneId: $input.item.json.cloudPhoneId,\n    finalScrolls: Math.floor(Math.random() * 3) + 3\n  }\n};"
+      },
+      "id": "random-final-params",
+      "name": "Random Final Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3650, 300],
+      "notes": "Generate random final scroll count (3-5)"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Final home feed engagement with 50% like rate\nconst cloudPhoneId = $input.item.json.cloudPhoneId;\nconst finalScrolls = $input.item.json.finalScrolls;\nconst axios = require('axios');\n\nfor (let i = 0; i < finalScrolls; i++) {\n  // Scroll\n  await axios.post('http://localhost:3000/api/tiktok/action', {\n    cloudPhoneId,\n    action: 'scroll_feed'\n  });\n  \n  // 50% chance to like\n  if (Math.random() * 100 <= 50) {\n    await axios.post('http://localhost:3000/api/tiktok/action', {\n      cloudPhoneId,\n      action: 'like_video'\n    });\n  }\n}\n\nreturn {\n  json: {\n    cloudPhoneId,\n    finalScrolls,\n    message: `Final engagement: ${finalScrolls} scrolls`\n  }\n};"
+      },
+      "id": "final-feed",
+      "name": "Final Home Engagement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3850, 300],
+      "notes": "Final 3-5 scrolls with 50% like rate"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/tiktok/action",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"cloudPhoneId\": \"{{ $json.cloudPhoneId }}\",\n  \"action\": \"exit_tiktok\"\n}",
+        "options": {}
+      },
+      "id": "exit-tiktok",
+      "name": "Exit TikTok",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [4050, 300],
+      "notes": "Exit TikTok app before powering off"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Wait 2 seconds after exit\nawait new Promise(resolve => setTimeout(resolve, 2000));\nreturn {\n  json: {\n    cloudPhoneId: $input.item.json.cloudPhoneId,\n    message: 'Ready for power off'\n  }\n};"
+      },
+      "id": "wait-exit",
+      "name": "Wait After Exit (2s)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4250, 300],
+      "notes": "Wait 2s after exiting TikTok"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/morelogin/poweroff",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"cloudPhoneId\": \"{{ $json.cloudPhoneId }}\"\n}",
+        "options": {}
+      },
+      "id": "power-off",
+      "name": "Power Off Device",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [4450, 300],
+      "notes": "Shut down cloud phone to save costs"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "device-id",
+              "name": "deviceId",
+              "value": "={{ $json.cloudPhoneId }}",
+              "type": "string"
+            },
+            {
+              "id": "completed-time",
+              "name": "completedAt",
+              "value": "={{ $now }}",
+              "type": "string"
+            },
+            {
+              "id": "session-duration",
+              "name": "duration",
+              "value": "=5-10 minutes",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-completion",
+      "name": "Log Completion",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [4650, 300],
+      "notes": "Log warm-up session completion"
+    }
+  ],
+  "connections": {
+    "Twice Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Cloud Phones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Cloud Phones": {
+      "main": [
+        [
+          {
+            "node": "Loop Each Device",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Each Device": {
+      "main": [
+        [
+          {
+            "node": "Power On Device",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Power On Device": {
+      "main": [
+        [
+          {
+            "node": "Wait for Boot (120s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Boot (120s)": {
+      "main": [
+        [
+          {
+            "node": "Enable ADB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enable ADB": {
+      "main": [
+        [
+          {
+            "node": "Wait for ADB (60s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for ADB (60s)": {
+      "main": [
+        [
+          {
+            "node": "Verify ADB Connection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify ADB Connection": {
+      "main": [
+        [
+          {
+            "node": "Start TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start TikTok": {
+      "main": [
+        [
+          {
+            "node": "Wait for App Load (5s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for App Load (5s)": {
+      "main": [
+        [
+          {
+            "node": "Random Main Feed Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Random Main Feed Params": {
+      "main": [
+        [
+          {
+            "node": "Main Feed Engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Main Feed Engagement": {
+      "main": [
+        [
+          {
+            "node": "Get Random Topic 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Random Topic 1": {
+      "main": [
+        [
+          {
+            "node": "Search & Explore 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search & Explore 1": {
+      "main": [
+        [
+          {
+            "node": "Get Random Topic 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Random Topic 2": {
+      "main": [
+        [
+          {
+            "node": "Search & Explore 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search & Explore 2": {
+      "main": [
+        [
+          {
+            "node": "Return to Home",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return to Home": {
+      "main": [
+        [
+          {
+            "node": "Random Final Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Random Final Params": {
+      "main": [
+        [
+          {
+            "node": "Final Home Engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Home Engagement": {
+      "main": [
+        [
+          {
+            "node": "Exit TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exit TikTok": {
+      "main": [
+        [
+          {
+            "node": "Wait After Exit (2s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait After Exit (2s)": {
+      "main": [
+        [
+          {
+            "node": "Power Off Device",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Power Off Device": {
+      "main": [
+        [
+          {
+            "node": "Log Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-15T12:00:00.000Z",
+  "versionId": "3"
+}
