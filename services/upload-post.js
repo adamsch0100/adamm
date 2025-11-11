@@ -289,14 +289,14 @@ class UploadPostService {
    */
   async getProfiles() {
     try {
-      const response = await this.client.get('/profiles');
-      
+      const response = await this.client.get('/api/uploadposts/users');
+
       return response.data.profiles.map(profile => ({
-        profileKey: profile.key,
-        platform: profile.platform,
+        profileKey: profile.username, // Use username as profile key
         username: profile.username,
-        connected: profile.status === 'active',
-        connectedAt: profile.connected_at
+        platform: 'multiple', // API doesn't specify platform per profile
+        connected: true, // Assume connected if in the list
+        connectedAt: profile.created_at
       }));
     } catch (error) {
       console.error('Get profiles error:', error.response?.data || error.message);
@@ -366,15 +366,37 @@ class UploadPostService {
       };
     } catch (error) {
       console.error('Create user profile error:', error.response?.data || error.message);
-      // If profile already exists, that's okay
-      if (error.response?.status === 409 || error.response?.data?.message?.includes('exists')) {
-        return {
-          success: true,
-          username: username,
-          alreadyExists: true
-        };
+
+      // Handle different error types
+      if (error.response) {
+        const status = error.response.status;
+        const errorData = error.response.data;
+
+        // Profile limit reached
+        if (status === 403 && errorData?.message?.includes('limit')) {
+          throw new Error(`Upload-Post profile limit reached: ${errorData.message}`);
+        }
+
+        // Profile already exists
+        if (status === 409 || errorData?.message?.includes('exists')) {
+          return {
+            success: true,
+            username: username,
+            alreadyExists: true
+          };
+        }
+
+        // Authentication/API key issues
+        if (status === 401 || status === 403) {
+          throw new Error(`Upload-Post authentication failed: ${errorData?.message || 'Invalid API key'}`);
+        }
+
+        // Other API errors
+        throw new Error(`Upload-Post API error: ${errorData?.message || 'Unknown error'}`);
       }
-      throw new Error(error.response?.data?.message || 'Failed to create user profile');
+
+      // Network or other errors
+      throw new Error(`Upload-Post connection error: ${error.message}`);
     }
   }
 
@@ -442,17 +464,22 @@ class UploadPostService {
    */
   async deleteProfile(username) {
     try {
+      console.log(`🔧 [UPLOAD-POST] Deleting profile: ${username}`);
       const response = await this.client.delete('/api/uploadposts/users', {
         data: { username }
       });
-      
+
+      console.log(`✅ [UPLOAD-POST] Delete response:`, response.data);
+
       return {
         success: true,
         username: username,
         message: response.data?.message || 'Profile deleted successfully'
       };
     } catch (error) {
-      console.error('Delete profile error:', error.response?.data || error.message);
+      console.error('❌ [UPLOAD-POST] Delete profile error:', error.response?.data || error.message);
+      console.error('❌ [UPLOAD-POST] Response status:', error.response?.status);
+      console.error('❌ [UPLOAD-POST] Full error:', error);
       throw new Error(error.response?.data?.message || 'Failed to delete profile');
     }
   }

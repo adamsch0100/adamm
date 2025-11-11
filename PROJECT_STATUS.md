@@ -1,7 +1,7 @@
 # PostPulse.io - Project Status Summary
 
 **Last Updated**: November 10, 2025  
-**Status**: 🟡 95% Complete - MoreLogin Integration Fix Applied (Needs Testing)
+**Status**: 🟡 95% Complete — MoreLogin local API validated; warmup automation alignment in progress (ADB reliability under review)
 
 ---
 
@@ -198,59 +198,51 @@ All 6 platforms fully integrated in UI:
 ## 🔧 Current Issue (Fix Applied - Needs Testing)
 
 ### Problem
-**MoreLogin API Integration Failing**
+**Warmup automation (ADB) losing permissions mid-session**
 
-**Error**: `Invalid character in header content ["X-Api-Id"]`
+**Error**: `java.lang.SecurityException: Injecting to another application requires INJECT_EVENTS permission` and subsequent `error: closed`
 
-**Location**: Account creation flow when auto-creating MoreLogin devices
+**Location**: TikTok warmup flow after ~10–12 ADB commands (scroll/like/follow)
 
 ### Root Cause
-1. MoreLogin API credentials stored in `operator_settings` table as **plain text**
-2. MCP server's `getOperatorApiKey()` function was attempting to **decrypt** them
-3. Decrypting plain text produces garbage UTF-8 characters
-4. These invalid characters in HTTP headers cause request failure
+1. MoreLogin cloud phones throttle or revoke full ADB shell access after sustained input injections.
+2. Current warmup service relies exclusively on `adb shell input ...` commands.
+3. Once ADB denies event injection, remaining warmup actions (topic search, follow, final scroll) abort.
 
-### Solution Applied
-**File**: `backend/mcp-server.js` (Lines 73-129)
+### Solution Applied / Findings
+- ✅ Confirmed warmup navigation works (Home → For You → topic search).
+- ✅ Updated warmup coordinates to align with `WARMUP-ACTIONS.md`.
+- ✅ Added automated follow-flow logic (open profile, follow, back, scroll).
+- ⚠️ ADB session still terminates with permission error on some devices.
+- 🔍 Investigating switch to MoreLogin `simulatedTouch` API for high-volume actions.
 
-**Changes**:
-- Modified `getOperatorApiKey()` to detect plain text vs encrypted values
-- Uses regex `/^[a-zA-Z0-9\-_\.]+$/` to identify plain text
-- If plain text: uses value as-is (no decryption)
-- If encrypted: decrypts using XOR cipher
+**Status**: 🟡 Partial success — initial actions run; requires alternative input method or ADB session stabilization.
 
-**Status**: ✅ Code fix applied, ⏳ needs testing
+### Testing Verification (Latest)
 
-### Testing Verification
-
-**Direct MoreLogin API Test**: ✅ Working
+**Comprehensive Warmup Script**: ⏳ Partial
 ```bash
-node test-morelogin.js
-# Result: Successfully creates cloud phones
+node test-complete-warmup.mjs
+# Result: Navigates and begins feed engagement; fails after repeated ADB swipes (permission revoked).
 ```
 
-**MCP Server Test**: ⏳ Needs retest after fix
-```bash
-node test-mcp-endpoint.js
-# Expected: Should now succeed
-```
+**Manual Validation**: ✅
+- Manually logging in via desktop client prior to tests avoids auth prompts.
+- Confirmed device assignment, proxy usage, and topic-based search steps execute before ADB drop.
 
-**Frontend Account Creation**: ⏳ Needs retest
-1. Navigate to http://localhost:3001/dashboard/accounts
-2. Click "Add Account"
-3. Fill form: username, email, password
-4. Submit
-5. Expected: Auto-creates Upload-Post profile + MoreLogin device
+**Next Investigation**:
+- Evaluate MoreLogin `simulatedTouch` API.
+- Explore ADB reconnection per action batch to mitigate permission timeout.
+- Coordinate with MoreLogin support regarding INJECT_EVENTS allowance.
 
 ---
 
 ## 📋 Next Steps (Priority Order)
 
-### 1. **Test MoreLogin Integration** (IMMEDIATE)
-- [ ] Restart MCP server: `cd backend && node mcp-server.js`
-- [ ] Test account creation via browser
-- [ ] Verify devices appear in "Cloud Devices" section
-- [ ] Check Supabase `social_accounts` table for proper `cloud_phone_id`
+### 1. **Stabilize Warmup Automation** (IMMEDIATE)
+- [ ] Prototype MoreLogin `simulatedTouch` replacements for swipe/tap actions
+- [ ] Add ADB reconnect + health-check between action groups
+- [ ] Validate full warmup cycle (watch → search → follow) without permission errors
 
 ### 2. **Complete Account Setup Flow**
 - [ ] Test Upload-Post profile creation
@@ -264,9 +256,9 @@ node test-mcp-endpoint.js
 - [ ] Verify analytics tracking
 
 ### 4. **Warmup Automation**
-- [ ] Test warmup start for TikTok account
-- [ ] Monitor warmup status updates
-- [ ] Verify ADB automation triggers
+- [x] Test warmup start for TikTok account (partial ADB success)
+- [ ] Monitor warmup status updates end-to-end
+- [ ] Implement follow-up actions using simulated touch or stabilized ADB pipeline
 
 ### 5. **Production Preparation**
 - [ ] Encrypt all API keys in `operator_settings` table
@@ -341,11 +333,11 @@ node test-mcp-endpoint.js
 
 ### Accounts
 - [x] List accounts
-- [ ] Add new account (blocked by MoreLogin issue)
+- [ ] Add new account (MoreLogin warmup awaiting stabilization)
 - [ ] Auto-create Upload-Post profile
 - [ ] Auto-create MoreLogin device
 - [x] Display account status
-- [ ] Start warmup
+- [x] Start warmup (partial success; ADB drops mid-session)
 - [ ] Pause warmup
 
 ### Content

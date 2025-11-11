@@ -37,8 +37,8 @@ class WarmupService {
         name: 'TikTok Standard Warmup',
         actions: [
           { action: 'scroll_feed', weight: 0.6, count: [8, 12], duration: [2000, 4000] },
-          { action: 'like_video', weight: 0.25, tapCoords: [540, 1200] },
-          { action: 'search', weight: 0.1, topics: ['crypto', 'bitcoin', 'ethereum', 'web3', 'trading'] },
+          { action: 'like_video', weight: 0.25, tapCoords: [972, 998] }, // 90% width, 52% height (1080x1920)
+          { action: 'search', weight: 0.1, topics: ['make money online', 'passive income', 'side hustle', 'financial freedom', 'entrepreneurship'] },
           { action: 'follow_account', weight: 0.05, count: [0, 2] }
         ],
         sessionDuration: [180000, 420000], // 3-7 minutes
@@ -118,12 +118,12 @@ class WarmupService {
     try {
       // Launch platform app
       const appPackages = {
-        tiktok: 'com.zhiliaoapp.musically',
-        instagram: 'com.instagram.android',
-        youtube: 'com.google.android.youtube',
-        facebook: 'com.facebook.katana',
-        linkedin: 'com.linkedin.android',
-        twitter: 'com.twitter.android'
+        tiktok: 'com.zhiliaoapp.musically/.MainActivity',
+        instagram: 'com.instagram.android/com.instagram.android.activity.MainTabActivity',
+        youtube: 'com.google.android.youtube/com.google.android.youtube.HomeActivity',
+        facebook: 'com.facebook.katana/com.facebook.katana.LoginActivity',
+        linkedin: 'com.linkedin.android/com.linkedin.android.authenticator.LaunchActivity',
+        twitter: 'com.twitter.android/com.twitter.android.StartActivity'
       };
 
       console.log(`Launching ${platform} app...`);
@@ -251,10 +251,11 @@ class WarmupService {
 
   async scrollFeed(adbHelper, config) {
     const scrollCount = config.count ? this.randomInRange(...config.count) : 10;
-    const duration = config.duration ? this.randomInRange(...config.duration) : 3000;
+    const duration = config.duration ? this.randomInRange(...config.duration) : 400;
 
     for (let i = 0; i < scrollCount; i++) {
-      await adbHelper.swipe(540, 1400, 540, 400, duration);
+      // TikTok feed scroll: 50% width, 75% to 25% height (1080x1920)
+      await adbHelper.swipe(540, 1440, 540, 480, duration);
       await this.sleep(this.randomInRange(500, 1500));
     }
   }
@@ -270,8 +271,8 @@ class WarmupService {
   }
 
   async performSearch(adbHelper, config) {
-    // Tap search icon (approximate coords)
-    await adbHelper.tap(900, 150);
+    // Tap search icon: 90% width, 8% height (1080x1920)
+    await adbHelper.tap(972, 154);
     await this.sleep(1000);
 
     // Random topic

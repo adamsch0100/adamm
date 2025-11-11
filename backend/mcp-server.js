@@ -104,15 +104,17 @@ async function getOperatorApiKey(service, field = 'api_key_encrypted') {
     // API keys are typically alphanumeric, secrets are hex strings
     const looksLikePlainText = /^[a-zA-Z0-9\-_\.]+$/.test(storedValue);
 
+    console.log(`🔍 ${service}:${field} - Raw value: ${storedValue.substring(0, 20)}..., looksLikePlainText: ${looksLikePlainText}`);
+
     let finalKey;
     if (looksLikePlainText) {
       // Value appears to be plain text, use as-is
       finalKey = storedValue.trim();
-      console.log(`Using plain text key for ${service}:${field}`);
+      console.log(`✅ Using plain text key for ${service}:${field}: ${finalKey.substring(0, 20)}...`);
     } else {
       // Value appears encrypted, decrypt it
       finalKey = decrypt(storedValue).trim();
-      console.log(`Decrypted key for ${service}:${field}`);
+      console.log(`🔓 Decrypted key for ${service}:${field}: ${finalKey.substring(0, 20)}...`);
     }
 
     // Cache the result
@@ -136,11 +138,11 @@ function encrypt(text) {
   const textBuffer = Buffer.from(text, 'utf8');
   const keyBuffer = Buffer.from(key, 'utf8');
   const encrypted = Buffer.alloc(textBuffer.length);
-  
+
   for (let i = 0; i < textBuffer.length; i++) {
     encrypted[i] = textBuffer[i] ^ keyBuffer[i % keyBuffer.length];
   }
-  
+
   return encrypted.toString('base64');
 }
 
@@ -149,11 +151,11 @@ function decrypt(encryptedText) {
   const encryptedBuffer = Buffer.from(encryptedText, 'base64');
   const keyBuffer = Buffer.from(key, 'utf8');
   const decrypted = Buffer.alloc(encryptedBuffer.length);
-  
+
   for (let i = 0; i < encryptedBuffer.length; i++) {
     decrypted[i] = encryptedBuffer[i] ^ keyBuffer[i % keyBuffer.length];
   }
-  
+
   return decrypted.toString('utf8');
 }
 
@@ -881,74 +883,108 @@ app.get('/api/cloud-phones', async (req, res) => {
 // Create new cloud phone with auto-proxy assignment
 app.post('/api/morelogin/create', async (req, res) => {
   try {
-    const { userId, name, country, skuId, autoProxy } = req.body;
+    const { userId, name, country, skuId, autoProxy, platform, username } = req.body;
     
-    console.log('📱 Creating cloud phone:', { userId, name, country, skuId, autoProxy });
+    console.log('📱 Creating cloud phone:', { userId, name, country, skuId, autoProxy, platform, username });
+    
+    const baseUrl = config.moreloginApiUrl || 'http://127.0.0.1:40000';
     
     // Step 1: Get available proxy if autoProxy is true
     let proxyId = 0;
     if (autoProxy) {
       try {
         const proxyResponse = await axios.post(
-          `${config.moreloginApiUrl}/api/proxyInfo/page`,
+          `${baseUrl}/api/proxyInfo/page`,
           { pageNo: 1, pageSize: 1, isCloudPhoneProxy: true },
           { headers: await generateMoreLoginHeaders() }
         );
-        
+
         if (proxyResponse.data.code === 0 && proxyResponse.data.data?.dataList?.length > 0) {
           proxyId = proxyResponse.data.data.dataList[0].id;
           console.log('✅ Found proxy:', proxyId);
         }
       } catch (proxyError) {
-        console.log('⚠️ No proxies available, creating without proxy');
+        console.log('⚠️ No proxies available, creating without proxy:', proxyError.message);
       }
     }
     
-    // Step 2: Create cloud phone
-    // SKU IDs: 10002 = Android 12 (Model X), 10004 = Android 14, try different values for Android 15
-    const deviceSkuId = skuId || 10002; // Default to Android 12
-    
-    console.log('🔧 Creating with SKU:', deviceSkuId, 'Proxy:', proxyId);
-    
+    // Step 2: Create cloud phone using MoreLogin Local API (desktop must be running)
+    console.log('🔧 Creating cloud phone via local API...');
+
+    const envRemark = `${platform || 'social'} - ${username || name || 'account'} - PostPulse Automation`;
+
     const response = await axios.post(
-      `${config.moreloginApiUrl}/api/cloudphone/create`,
+      `${baseUrl}/api/cloudphone/create`,
       {
         quantity: 1,
-        skuId: deviceSkuId,
-        country: country || 'us',
-        proxyId: proxyId,
-        envRemark: name || 'Auto-created device',
+        skuId: skuId || 10002,
         automaticGeo: true,
         automaticLanguage: true,
-        automaticLocation: true
+        automaticLocation: true,
+        country: country || 'us',
+        proxyId: proxyId || 0,
+        envRemark: envRemark
       },
       {
         headers: await generateMoreLoginHeaders()
       }
     );
-    
+
     console.log('📡 MoreLogin response:', JSON.stringify(response.data));
-    
-    // Check response - it might succeed even if code !== 0
-    const cloudPhoneIds = response.data.data || response.data;
-    
-    if (!cloudPhoneIds || (Array.isArray(cloudPhoneIds) && cloudPhoneIds.length === 0)) {
+
+    if (response.data.code !== 0) {
       throw new Error(response.data.msg || 'Failed to create cloud phone');
     }
-    
-    // Step 3: Save to database
-    const phoneId = Array.isArray(cloudPhoneIds) ? cloudPhoneIds[0] : cloudPhoneIds;
-    
+
+    let cloudPhoneId;
+    if (Array.isArray(response.data.data)) {
+      cloudPhoneId = response.data.data[0];
+    } else if (typeof response.data.data === 'number') {
+      cloudPhoneId = response.data.data;
+    } else {
+      cloudPhoneId = response.data.data?.id || response.data.data;
+    }
+
+    if (!cloudPhoneId) {
+      console.error('❌ Unable to extract cloud phone ID from response:', response.data);
+      throw new Error('Failed to extract cloud phone ID from MoreLogin response');
+    }
+
+    console.log('✅ Cloud phone created:', cloudPhoneId);
+
+    try {
+      console.log('🔧 Enabling ADB for cloud phone...');
+      const adbResponse = await axios.post(
+        `${baseUrl}/api/cloudphone/updateAdb`,
+        {
+          enableAdb: true,
+          ids: [cloudPhoneId]
+        },
+        {
+          headers: await generateMoreLoginHeaders()
+        }
+      );
+
+      if (adbResponse.data.code === 0) {
+        console.log('✅ ADB enabled for cloud phone');
+      } else {
+        console.log('⚠️ Failed to enable ADB:', adbResponse.data.msg);
+      }
+    } catch (adbError) {
+      console.log('⚠️ ADB enable failed:', adbError.message);
+    }
+
+    // Step 4: Save to database
     if (userId) {
       const { data: dbData, error: dbError } = await supabase
         .from('cloud_phones')
         .insert({
           user_id: userId,
-          morelogin_id: phoneId.toString(),
-          name: name || 'Auto-created device',
+          morelogin_id: cloudPhoneId.toString(),
+          name: name || envRemark,
           country: country || 'us',
           status: 'new',
-          adb_enabled: false,
+          adb_enabled: true, // Cloud phones support ADB
           proxy_id: proxyId || null
         })
         .select()
@@ -957,15 +993,15 @@ app.post('/api/morelogin/create', async (req, res) => {
       if (dbError) {
         console.error('❌ Database save error:', dbError);
       } else {
-        console.log('✅ Saved to database:', dbData.id);
+        console.log('✅ Saved cloud phone to database:', dbData.id);
       }
     }
     
     res.json({
       success: true,
-      cloudPhoneId: phoneId,
+      cloudPhoneId: cloudPhoneId,
       proxyAssigned: proxyId > 0,
-      message: `Created cloud phone successfully`
+      message: `Created cloud phone successfully with ${proxyId > 0 ? 'proxy' : 'no proxy'}`
     });
     
   } catch (error) {
@@ -1054,6 +1090,61 @@ app.post('/api/morelogin/adb/enable', async (req, res) => {
     }
   } catch (error) {
     console.error('Error enabling ADB:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      details: error.response?.data
+    });
+  }
+});
+
+// Delete cloud phones
+app.delete('/api/morelogin/cloudphones/:cloudPhoneId', async (req, res) => {
+  try {
+    const { cloudPhoneId } = req.params;
+
+    console.log(`🗑️ [BACKEND] Deleting cloud phone: ${cloudPhoneId}`);
+
+    const moreloginBaseUrl = config.moreloginApiUrl || 'http://127.0.0.1:40000';
+
+    const response = await axios.post(
+      `${moreloginBaseUrl}/api/cloudphone/delete/batch`,
+      {
+        ids: [parseInt(cloudPhoneId)]
+      },
+      {
+        headers: await generateMoreLoginHeaders()
+      }
+    );
+
+    console.log('📡 MoreLogin delete response:', JSON.stringify(response.data));
+
+    if (response.data.code === 0) {
+      // Also delete from our database
+      const { error: dbError } = await supabase
+        .from('cloud_phones')
+        .delete()
+        .eq('morelogin_id', cloudPhoneId);
+
+      if (dbError) {
+        console.error('❌ Database delete error:', dbError);
+      } else {
+        console.log('✅ Deleted from database');
+      }
+
+      res.json({
+        success: true,
+        message: 'Cloud phone deleted successfully'
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: response.data.msg,
+        code: response.data.code
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error deleting cloud phone:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -2669,23 +2760,32 @@ app.post('/api/warmup/execute', async (req, res) => {
     );
 
     // Power on device if not already running
+    console.log(`Powering on device ${cloudPhoneId}...`);
     await axios.post(
-      `${config.moreloginApiUrl}/vcpcloud/api/cloudPhone/powerOn`,
-      { cloud_phone_id: cloudPhoneId },
+      `${config.moreloginApiUrl}/api/cloudphone/powerOn`,
+      { id: cloudPhoneId },
       { headers: await generateMoreLoginHeaders() }
     );
 
-    await new Promise(resolve => setTimeout(resolve, 10000));
+    console.log('Waiting 30 seconds for device to fully start...');
+    await new Promise(resolve => setTimeout(resolve, 30000));
 
     // Enable ADB
+    console.log(`Enabling ADB for device ${cloudPhoneId}...`);
     const adbResponse = await axios.post(
-      `${config.moreloginApiUrl}/vcpcloud/api/cloudPhoneAdb/enable`,
-      { cloud_phone_id: cloudPhoneId },
+      `${config.moreloginApiUrl}/api/cloudphone/updateAdb`,
+      { enableAdb: true, ids: [cloudPhoneId] },
       { headers: await generateMoreLoginHeaders() }
     );
 
+    console.log('ADB enable response:', JSON.stringify(adbResponse.data, null, 2));
     const adbInfo = adbResponse.data.data;
 
+    if (!adbInfo || !adbInfo.adb_ip) {
+      throw new Error('ADB info not found in response. Make sure ADB is enabled on this cloud phone.');
+    }
+
+    console.log(`Connecting to ADB at ${adbInfo.adb_ip}:${adbInfo.adb_port}...`);
     // Connect ADB
     const adb = new ADBHelper(adbInfo.adb_ip, adbInfo.adb_port, adbInfo.adb_password);
     await adb.connect();
@@ -3035,24 +3135,29 @@ app.delete('/api/upload-post/profiles/:profileKey', async (req, res) => {
   const { uploadPostApiKey } = req.body;
 
   try {
+    console.log(`🔧 [BACKEND] Deleting profile: ${profileKey}`);
     if (!uploadPostApiKey) {
+      console.log('❌ [BACKEND] No API key provided');
       return res.status(400).json({
         error: 'Upload-post API key is required'
       });
     }
 
     const uploadPost = new UploadPostService(uploadPostApiKey);
-    const result = await uploadPost.disconnectProfile(profileKey);
+    const result = await uploadPost.deleteProfile(profileKey);
 
+    console.log(`✅ [BACKEND] Profile deleted successfully:`, result);
     res.json({
       success: true,
       message: result.message
     });
 
   } catch (error) {
-    console.error('Disconnect profile error:', error);
+    console.error('❌ [BACKEND] Delete profile error:', error);
+    console.error('❌ [BACKEND] Error message:', error.message);
+    console.error('❌ [BACKEND] Error stack:', error.stack);
     res.status(500).json({
-      error: error.message || 'Failed to disconnect profile'
+      error: error.message || 'Failed to delete profile'
     });
   }
 });
@@ -3294,7 +3399,7 @@ app.post('/api/upload-post/create-profile', async (req, res) => {
 
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
+
     if (authError || !user) {
       return res.status(401).json({ error: 'Invalid token' });
     }
@@ -3307,10 +3412,12 @@ app.post('/api/upload-post/create-profile', async (req, res) => {
 
     const uploadPostService = new UploadPostService(uploadPostKey);
 
-    // Use Supabase user ID as username for Upload-Post
-    const username = user.id;
-    
+    // Generate unique username for Upload-Post (user.id + timestamp)
+    const username = `${user.id}_${Date.now()}`;
+    console.log('🔧 [UPLOAD-POST] Creating profile with username:', username);
+
     const profile = await uploadPostService.createUserProfile(username);
+    console.log('✅ [UPLOAD-POST] Profile created successfully:', profile);
 
     // Update user's profile in Supabase
     await supabase
@@ -3328,7 +3435,9 @@ app.post('/api/upload-post/create-profile', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Create Upload-Post profile error:', error);
+    console.error('❌ Create Upload-Post profile error:', error);
+    console.error('❌ Error message:', error.message);
+    console.error('❌ Error stack:', error.stack);
     res.status(500).json({
       error: error.message || 'Failed to create Upload-Post profile'
     });
@@ -5968,10 +6077,10 @@ app.post('/api/warmup/start', async (req, res) => {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    const { accountId, platform, daysTotal } = req.body;
+    const { accountId, platform, daysTotal, topics } = req.body;
 
-    if (!accountId || !platform || !daysTotal) {
-      return res.status(400).json({ error: 'accountId, platform, and daysTotal are required' });
+    if (!accountId || !platform || !daysTotal || !topics) {
+      return res.status(400).json({ error: 'accountId, platform, daysTotal, and topics are required' });
     }
 
     // Get account details
@@ -6008,29 +6117,96 @@ app.post('/api/warmup/start', async (req, res) => {
         total_days: daysTotal,
         actions_completed: 0,
         status: 'in_progress',
+        topics: topics,
         next_session_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString() // 4 hours from now
       })
       .select()
       .single();
 
     if (warmupError) {
-      console.error('Warmup session creation error:', warmupError);
-      return res.status(500).json({ error: 'Failed to create warmup session' });
+      console.error('Warmup session creation error:', JSON.stringify(warmupError, null, 2));
+      return res.status(500).json({
+        error: 'Failed to create warmup session',
+        details: warmupError
+      });
     }
 
     // Start warmup using existing warmup service
-    const WarmupService = (await import('./services/warmup.js')).default;
+    console.log('Creating WarmupService...');
+    const WarmupService = (await import('../services/warmup.js')).default;
+
+    console.log('Getting MoreLogin API keys...');
+    const apiId = await getOperatorApiKey('morelogin', 'api_key_encrypted');
+    const apiSecret = await getOperatorApiKey('morelogin', 'api_secret_encrypted');
+
+    console.log('API ID:', apiId ? 'found' : 'NOT FOUND');
+    console.log('API Secret:', apiSecret ? 'found' : 'NOT FOUND');
+
+    if (!apiId || !apiSecret) {
+      throw new Error('MoreLogin API credentials not found');
+    }
+
     const warmupService = new WarmupService(
       config.moreloginApiUrl,
-      await getOperatorApiKey('morelogin', 'api_id'),
-      await getOperatorApiKey('morelogin', 'api_secret_encrypted')
+      apiId,
+      apiSecret
     );
 
+    // Ensure the cloud phone is powered on before continuing
+    console.log('Powering on cloud phone if needed...');
+    const powerOnPayload = { id: Number(account.cloud_phone_id) };
+    try {
+      const powerOnRes = await axios.post(
+        `${config.moreloginApiUrl}/api/cloudphone/powerOn`,
+        powerOnPayload,
+        { headers: await generateMoreLoginHeaders(), timeout: 15000 }
+      );
+
+      if (powerOnRes.data.code === 0) {
+        console.log('Cloud phone power on request accepted. Waiting 30 seconds for startup...');
+        await new Promise(resolve => setTimeout(resolve, 30000));
+      } else if (powerOnRes.data.code === 33324) {
+        console.log('Cloud phone already running.');
+      } else {
+        console.log('Unexpected power on response:', powerOnRes.data);
+      }
+    } catch (powerError) {
+      console.log('Power on request failed (continuing):', powerError.message);
+    }
+
+    // Set up ADB connection for the warmup session
+    console.log('Setting up ADB connection...');
+    const ADBHelper = (await import('./adb-helper.js')).default;
+
+    // Get ADB connection info from MoreLogin
+    const adbHeaders = await generateMoreLoginHeaders();
+    const phoneInfoRes = await axios.post(
+      `${config.moreloginApiUrl}/api/cloudphone/page`,
+      { pageNo: 1, pageSize: 20 },
+      { headers: adbHeaders, timeout: 10000 }
+    );
+
+    const phoneInfo = phoneInfoRes.data.data.dataList.find(p => p.id === account.cloud_phone_id.toString());
+
+    if (!phoneInfo?.adbInfo || phoneInfo.adbInfo.success !== 1) {
+      throw new Error('ADB info not available for warmup device');
+    }
+
+    const adbIp = phoneInfo.adbInfo.adbIp;
+    const adbPort = phoneInfo.adbInfo.adbPort;
+    const adbPassword = phoneInfo.adbInfo.adbPassword;
+
+    console.log('ADB Connection Info:', { ip: adbIp, port: adbPort, hasPassword: !!adbPassword });
+
+    const adbHelper = new ADBHelper(adbIp, adbPort, adbPassword);
+
     // Execute first warmup session async (don't block response)
-    warmupService.executeWarmup({
+    warmupService.executeWarmupSession({
       cloudPhoneId: account.cloud_phone_id,
       platform: platform,
-      sessionNumber: 1
+      accountId: accountId,
+      topics: topics,
+      adbHelper: adbHelper
     }).catch(err => {
       console.error('Warmup execution error:', err);
     });
@@ -6193,35 +6369,34 @@ app.get('/api/accounts', async (req, res) => {
  */
 app.post('/api/accounts', async (req, res) => {
   try {
+    console.log('🔍 Starting account creation...');
     const authHeader = req.headers.authorization;
     if (!authHeader) {
+      console.log('❌ No authorization header');
       return res.status(401).json({ error: 'Authorization required' });
     }
 
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
+
     if (authError || !user) {
+      console.log('❌ Invalid token:', authError);
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    const { platform, username, displayName, twitterProfileKey, tiktokProfileKey, whopLink } = req.body;
+    const { platform, username, displayName, twitterProfileKey, tiktokProfileKey, uploadPostProfileKey, cloudPhoneId, whopLink } = req.body;
+    console.log('📝 Account data:', { platform, username, displayName, hasTwitterKey: !!twitterProfileKey, hasTiktokKey: !!tiktokProfileKey, hasUploadPostKey: !!uploadPostProfileKey });
 
     if (!username) {
+      console.log('❌ No username provided');
       return res.status(400).json({ error: 'Username is required' });
     }
 
-    // Validate profile keys based on platform
-    if (platform === 'both' || platform === 'twitter') {
-      if (!twitterProfileKey) {
-        return res.status(400).json({ error: 'Twitter profile key is required' });
-      }
-    }
-    if (platform === 'both' || platform === 'tiktok') {
-      if (!tiktokProfileKey) {
-        return res.status(400).json({ error: 'TikTok profile key is required' });
-      }
-    }
+    // Validate profile keys based on platform (Upload-Post profiles are optional for warmup)
+    // We allow accounts to be created without Upload-Post profiles since warmup doesn't require them
+    console.log('📝 Profile keys validation: platform keys are optional for warmup functionality')
+
+    console.log('✅ Validation passed, proceeding with automated setup...');
 
     // Store profile keys in auth_data
     const authData = {};
@@ -6231,21 +6406,36 @@ app.post('/api/accounts', async (req, res) => {
     if (tiktokProfileKey) {
       authData.uploadpost_profile_key_tiktok = tiktokProfileKey;
     }
+    // Handle generic uploadPostProfileKey (from frontend automation)
+    if (uploadPostProfileKey) {
+      if (platform === 'tiktok') {
+        authData.uploadpost_profile_key_tiktok = uploadPostProfileKey;
+      } else if (platform === 'twitter') {
+        authData.uploadpost_profile_key_twitter = uploadPostProfileKey;
+      }
+    }
     
     // If platform is 'both', store as 'twitter' (we'll detect TikTok from auth_data)
     const dbPlatform = platform === 'both' ? 'twitter' : platform;
 
+    const accountInsertData = {
+      user_id: user.id,
+      platform: dbPlatform,
+      username: username.replace('@', ''),
+      display_name: displayName,
+      auth_data: authData,
+      bio_link: whopLink, // Store Whop link as bio_link
+      status: 'active'
+    };
+
+    // Add cloud phone ID if provided (from frontend automation)
+    if (cloudPhoneId) {
+      accountInsertData.cloud_phone_id = cloudPhoneId;
+    }
+
     const { data, error } = await supabase
       .from('social_accounts')
-      .insert({
-        user_id: user.id,
-        platform: dbPlatform,
-        username: username.replace('@', ''),
-        display_name: displayName,
-        auth_data: authData,
-        bio_link: whopLink, // Store Whop link as bio_link
-        status: 'active'
-      })
+      .insert(accountInsertData)
       .select()
       .single();
 
@@ -6326,6 +6516,83 @@ app.delete('/api/accounts/:id', async (req, res) => {
 
     const { id } = req.params;
 
+    // First get the account details to find associated cloud phones
+    const { data: account, error: accountError } = await supabase
+      .from('social_accounts')
+      .select('cloud_phone_id, upload_post_profile_key')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (accountError) {
+      throw new Error(`Account not found: ${accountError.message}`);
+    }
+
+    // Delete associated MoreLogin cloud phone if exists
+    if (account.cloud_phone_id) {
+      try {
+        console.log(`🗑️ [ACCOUNT DELETE] Deleting associated cloud phone: ${account.cloud_phone_id}`);
+
+        const moreloginBaseUrl = config.moreloginApiUrl || 'http://127.0.0.1:40000';
+
+        const deleteResponse = await axios.post(
+          `${moreloginBaseUrl}/api/cloudphone/delete/batch`,
+          {
+            ids: [parseInt(account.cloud_phone_id)]
+          },
+          {
+            headers: await generateMoreLoginHeaders()
+          }
+        );
+
+        if (deleteResponse.data.code === 0) {
+          console.log('✅ Cloud phone deleted from MoreLogin API');
+        } else {
+          console.log('⚠️ Failed to delete cloud phone from MoreLogin API:', deleteResponse.data.msg);
+        }
+
+        // Delete from our database
+        const { error: dbError } = await supabase
+          .from('cloud_phones')
+          .delete()
+          .eq('morelogin_id', account.cloud_phone_id)
+          .eq('user_id', user.id);
+
+        if (dbError) {
+          console.error('❌ Database cloud phone delete error:', dbError);
+        } else {
+          console.log('✅ Cloud phone deleted from database');
+        }
+      } catch (cloudPhoneError) {
+        console.error('❌ Error deleting associated cloud phone:', cloudPhoneError.message);
+      }
+    }
+
+    // Delete associated Upload-Post profile if exists
+    if (account.upload_post_profile_key) {
+      try {
+        console.log(`🗑️ [ACCOUNT DELETE] Deleting associated Upload-Post profile: ${account.upload_post_profile_key}`);
+
+        // Get Upload-Post API key
+        const uploadPostKey = await getOperatorApiKey('uploadpost', 'api_key_encrypted');
+        if (uploadPostKey) {
+          const uploadPostService = new UploadPostService(uploadPostKey);
+          await uploadPostService.deleteProfile(account.upload_post_profile_key);
+          console.log('✅ Upload-Post profile deleted');
+        }
+
+        // Clear the profile key from user profile
+        await supabase
+          .from('profiles')
+          .update({ upload_post_username: null })
+          .eq('id', user.id);
+
+      } catch (uploadPostError) {
+        console.error('❌ Error deleting associated Upload-Post profile:', uploadPostError.message);
+      }
+    }
+
+    // Finally delete the social account
     const { error } = await supabase
       .from('social_accounts')
       .delete()
@@ -6379,6 +6646,7 @@ app.listen(PORT, () => {
   console.log(`\n   MORELOGIN MANAGEMENT:`);
   console.log(`   GET  /api/morelogin/instances - Fetch cloud phone list`);
   console.log(`   POST /api/morelogin/create - Create new cloud phone`);
+  console.log(`   DELETE /api/morelogin/cloudphones/:id - Delete cloud phone`);
   console.log(`   POST /api/morelogin/adb/enable - Enable ADB for cloud phone`);
   console.log(`   POST /api/morelogin/proxy/add - Add proxy`);
   console.log(`   POST /api/morelogin/proxy/assign - Assign proxy to cloud phone`);

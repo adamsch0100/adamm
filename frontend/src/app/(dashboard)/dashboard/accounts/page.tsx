@@ -15,7 +15,6 @@ import {
   Plus,
   Trash2,
   Pause,
-  Play,
   Twitter,
   Smartphone,
   Flame,
@@ -43,6 +42,7 @@ interface WarmupStatus {
   status: string
   nextSessionAt: string | null
   actionsCompleted: number
+  topics?: string[]
 }
 
 export default function AccountsPage() {
@@ -69,8 +69,8 @@ export default function AccountsPage() {
     uploadPostProfileKey: '',
     cloudPhoneId: null as number | null,
     notes: '',
-    warmupTopics: '',
-    warmupDuration: 14
+    warmupTopics: 'make money online, passive income, side hustle, entrepreneurship, financial freedom',
+    warmupDuration: 5
   })
 
   useEffect(() => {
@@ -87,16 +87,30 @@ export default function AccountsPage() {
 
   const fetchAccounts = async () => {
     try {
+      console.log('🔍 Fetching accounts...')
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
+      console.log('Session found:', !!session)
+      if (!session) {
+        console.log('No session, returning')
+        return
+      }
 
-      const response = await fetch('/api/accounts')
+      console.log('Making API call to backend...')
+      const response = await fetch('http://localhost:3000/api/accounts', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      console.log('Response status:', response.status)
 
       if (response.ok) {
         const data = await response.json()
+        console.log('API response data:', data)
+        console.log('Setting accounts:', data.accounts || [])
         setAccounts(data.accounts || [])
         // Load warmup statuses for accounts
-        loadWarmupStatuses()
+        loadWarmupStatuses(data.accounts || [])
       } else {
         const error = await response.json().catch(() => ({}))
         toast.error(error?.error || 'Failed to load accounts')
@@ -109,10 +123,18 @@ export default function AccountsPage() {
 
   const fetchDevices = async () => {
     try {
-      const response = await fetch('/api/devices')
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const response = await fetch('http://localhost:3000/api/cloud-phones', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
       if (response.ok) {
         const data = await response.json()
-        setDevices(data.devices || [])
+        setDevices(data.cloud_phones || [])
         if (data.warning) {
           toast.warning(data.warning)
         }
@@ -126,22 +148,41 @@ export default function AccountsPage() {
     }
   }
 
-  const loadWarmupStatuses = async () => {
-    if (accounts.length === 0) return
+  const loadWarmupStatuses = async (accountList?: any[]) => {
+    const targets = accountList && accountList.length ? accountList : accounts
+    if (targets.length === 0) return
+
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
 
     const statuses: Record<number, WarmupStatus> = {}
 
-    for (const account of accounts) {
+    const results = await Promise.all(
+      targets.map(async (account) => {
       try {
-        const response = await fetch(`/api/accounts/${account.id}/warmup`)
-        if (response.ok) {
-          const data = await response.json()
-          if (data.status !== 'not_started') {
-            statuses[account.id] = data
+          const response = await fetch(`http://localhost:3000/api/warmup/status/${account.id}`, {
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json'
+            }
+          })
+
+          if (!response.ok) {
+            return null
           }
-        }
+
+          const data = await response.json()
+          return { accountId: account.id, data }
       } catch (error) {
         console.error(`Failed to load warmup status for account ${account.id}:`, error)
+          return null
+        }
+      })
+    )
+
+    for (const result of results) {
+      if (result?.data?.status && result.data.status !== 'not_started') {
+        statuses[result.accountId] = result.data
       }
     }
 
@@ -151,7 +192,7 @@ export default function AccountsPage() {
   const fetchUploadPostProfiles = async () => {
     setProfileLoading(true)
     try {
-      const response = await fetch('/api/upload-post/profiles')
+      const response = await fetch('http://localhost:3000/api/upload-post/profiles')
       if (response.ok) {
         const data = await response.json()
         setUploadPostProfiles(data.profiles || [])
@@ -168,7 +209,7 @@ export default function AccountsPage() {
   const handleCreateProfile = async (username: string) => {
     setProfileLoading(true)
     try {
-      const response = await fetch('/api/upload-post/profiles', {
+      const response = await fetch('http://localhost:3000/api/upload-post/profiles', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username })
@@ -191,7 +232,7 @@ export default function AccountsPage() {
   const handleGenerateLinkUrl = async (username: string, platforms?: string[]) => {
     setProfileLoading(true)
     try {
-      const response = await fetch('/api/upload-post/link', {
+      const response = await fetch('http://localhost:3000/api/upload-post/link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -222,7 +263,7 @@ export default function AccountsPage() {
 
     setProfileLoading(true)
     try {
-      const response = await fetch('/api/upload-post/profiles', {
+      const response = await fetch('http://localhost:3000/api/upload-post/profiles', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username })
@@ -257,15 +298,20 @@ export default function AccountsPage() {
         return
       }
 
+      const authHeader = `Bearer ${session.access_token}`
+
       toast.info('Setting up account integrations...')
 
       // Step 1: Ensure Upload-Post profile exists
       let uploadPostProfileKey = newAccount.uploadPostProfileKey
       if (!uploadPostProfileKey) {
         try {
-          const profileResponse = await fetch('/api/upload-post/profiles', {
+          const profileResponse = await fetch('http://localhost:3000/api/upload-post/create-profile', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': authHeader
+            },
             body: JSON.stringify({})
           })
 
@@ -277,11 +323,35 @@ export default function AccountsPage() {
 
             toast.success('Upload-Post profile ready')
           } else {
-            const error = await profileResponse.json().catch(() => ({}))
+            console.log('Upload-Post response status:', profileResponse.status)
+            console.log('Upload-Post response headers:', Object.fromEntries(profileResponse.headers.entries()))
+
+            let error = {}
+            try {
+              const responseText = await profileResponse.text()
+              console.log('Upload-Post raw response text:', responseText)
+
+              error = JSON.parse(responseText)
+              console.log('Upload-Post parsed error:', error)
+            } catch (parseError) {
+              console.log('Upload-Post JSON parse error:', parseError)
+              error = { error: `HTTP ${profileResponse.status}: ${profileResponse.statusText}` }
+            }
+
+            // Handle Upload-Post errors gracefully
             console.error('Upload-Post profile creation failed:', error)
+
+            // Check if it's an account limit error
+            if (error?.error?.includes('limit') || error?.message?.includes('limit') ||
+                error?.error?.includes('account') || error?.message?.includes('account')) {
+              console.log('Upload-Post account limit reached, continuing without profile')
+              toast.warning('Upload-Post account limit reached - account will be created without posting capabilities')
+              uploadPostProfileKey = null // Explicitly set to null
+            } else {
             toast.error(error?.error || 'Failed to create Upload-Post profile')
             setLoading(false)
             return
+            }
           }
         } catch (error) {
           console.error('Upload-Post profile creation error:', error)
@@ -295,13 +365,20 @@ export default function AccountsPage() {
       let cloudPhoneId = newAccount.cloudPhoneId
       if (!cloudPhoneId) {
         try {
-          const deviceResponse = await fetch('/api/morelogin/create', {
+          const deviceResponse = await fetch('http://localhost:3000/api/morelogin/create', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': authHeader
+            },
             body: JSON.stringify({
               name: `${newAccount.platform}_${newAccount.username}_${Date.now()}`,
               country: 'US',
-              autoProxy: true
+              autoProxy: true,
+              platform: newAccount.platform,
+              username: newAccount.username,
+              skuId: 10002, // Model X for TikTok automation
+              userId: session.user?.id
             })
           })
 
@@ -343,10 +420,13 @@ export default function AccountsPage() {
         cloudPhoneId
       }
 
-      const response = await fetch('/api/accounts', {
+      console.log('🗂️ Sending account data to backend:', accountData);
+
+      const response = await fetch('http://localhost:3000/api/accounts', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
         },
         body: JSON.stringify(accountData)
       })
@@ -372,8 +452,8 @@ export default function AccountsPage() {
           uploadPostProfileKey: '',
           cloudPhoneId: null,
           notes: '',
-          warmupTopics: '',
-          warmupDuration: 14
+          warmupTopics: 'make money online, passive income, side hustle, entrepreneurship, financial freedom',
+          warmupDuration: 5
         })
         fetchAccounts()
       } else {
@@ -392,15 +472,27 @@ export default function AccountsPage() {
     setWarmupLoading(prev => ({ ...prev, [accountId]: true }))
 
     try {
-      const response = await fetch(`/api/accounts/${accountId}/warmup`, {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        toast.error('Authentication required')
+        setWarmupLoading(prev => ({ ...prev, [accountId]: false }))
+        return
+      }
+
+      const platform = accounts.find(a => a.id === accountId)?.platform || 'tiktok'
+      const topicList = topics.split(',').map(t => t.trim()).filter(Boolean)
+
+      const response = await fetch('http://localhost:3000/api/warmup/start', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
         },
         body: JSON.stringify({
-          topics: topics.split(',').map(t => t.trim()).filter(t => t),
+          accountId,
+          topics: topicList,
           daysTotal: duration,
-          platform: accounts.find(a => a.id === accountId)?.platform || 'tiktok'
+          platform
         })
       })
 
@@ -418,10 +510,33 @@ export default function AccountsPage() {
     }
   }
 
+  const handlePromptWarmup = (account: any) => {
+    // Use saved warmup topics from account or default
+    const topics =
+      warmupStatuses[account.id]?.topics?.join(', ') ||
+      account.warmup_topics ||
+      'make money online, passive income, side hustle, entrepreneurship, financial freedom'
+    
+    // Use 5 days as standard duration
+    const duration = 5
+
+    toast.info('Starting warmup session...')
+    handleStartWarmup(account.id, topics, duration)
+  }
+
   const handlePauseWarmup = async (accountId: number) => {
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        toast.error('Authentication required')
+        return
+      }
+
       const response = await fetch(`/api/warmup/pause/${accountId}`, {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
       })
 
       if (response.ok) {
@@ -435,47 +550,43 @@ export default function AccountsPage() {
     }
   }
 
-  const handleToggleStatus = async (accountId: number, currentStatus: string) => {
-    const newStatus = currentStatus === 'active' ? 'paused' : 'active'
+  const handleDeleteAccount = async (accountId: number) => {
+    if (!confirm('Are you sure you want to delete this account?')) return
     
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-
-      const response = await fetch(`/api/accounts/${accountId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status: newStatus })
-      })
-
-      if (response.ok) {
-        toast.success(`Account ${newStatus === 'active' ? 'activated' : 'paused'}`)
-        fetchAccounts()
+      if (!session) {
+        console.error('No session found')
+        toast.error('Please log in again')
+        return
       }
-    } catch (error) {
-      toast.error('Failed to update account')
-    }
-  }
 
-  const handleDeleteAccount = async (accountId: number) => {
-    if (!confirm('Are you sure you want to delete this account?')) return
+      console.log('🗑️ Deleting account:', accountId)
+      console.log('Session token:', session.access_token?.substring(0, 20) + '...')
 
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-
-      const response = await fetch(`/api/accounts/${accountId}`, {
-        method: 'DELETE'
+      const response = await fetch(`http://localhost:3000/api/accounts/${accountId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
       })
 
+      console.log('Delete response status:', response.status)
+
       if (response.ok) {
+        const result = await response.json()
+        console.log('Delete result:', result)
         toast.success('Account deleted')
         fetchAccounts()
+      } else {
+        const error = await response.json()
+        console.error('Delete failed:', error)
+        toast.error(error.error || 'Failed to delete account')
       }
-    } catch (error) {
-      toast.error('Failed to delete account')
+    } catch (error: any) {
+      console.error('Delete account error:', error)
+      toast.error(error.message || 'Failed to delete account')
     }
   }
 
@@ -770,8 +881,8 @@ export default function AccountsPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="">Auto-create new device</SelectItem>
-                          {devices.map((device) => (
-                            <SelectItem key={device.id} value={device.id.toString()}>
+                          {devices.map((device, deviceIndex) => (
+                            <SelectItem key={device.id || `device-${deviceIndex}`} value={(device.id || '').toString()}>
                               <div className="flex items-center gap-2">
                                 <Smartphone className="h-4 w-4" />
                                 {device.name} ({device.country}) - {device.status}
@@ -853,6 +964,7 @@ export default function AccountsPage() {
           )}
 
           {/* Accounts List */}
+          {console.log('Rendering accounts:', accounts)}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {accounts.map((account: any) => {
               const warmupStatus = warmupStatuses[account.id]
@@ -907,35 +1019,20 @@ export default function AccountsPage() {
                     <div className="flex gap-2">
                       <Button
                         size="sm"
-                        variant="outline"
-                        onClick={() => handleToggleStatus(account.id, account.status)}
-                        className="flex-1"
-                      >
-                        {account.status === 'active' ? (
-                          <><Pause className="h-3 w-3 mr-1" /> Pause</>
-                        ) : (
-                          <><Play className="h-3 w-3 mr-1" /> Activate</>
-                        )}
-                      </Button>
-
-                      {!warmupStatus && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            const topics = prompt('Enter warmup topics (comma-separated):', 'dancing, comedy, cooking')
-                            if (topics) handleStartWarmup(account.id, topics, 14)
-                          }}
+                        variant="default"
+                        onClick={() => handlePromptWarmup(account)}
                           disabled={warmupLoading[account.id]}
-                          className="border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
+                        className="flex-1 bg-orange-500 text-white hover:bg-orange-600"
                         >
                           {warmupLoading[account.id] ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
                           ) : (
-                            <Flame className="h-3 w-3" />
+                          <>
+                            <Flame className="h-3 w-3 mr-1" />
+                            Start Warmup
+                          </>
                           )}
                         </Button>
-                      )}
 
                       {warmupStatus?.status === 'active' && (
                         <Button
@@ -944,7 +1041,8 @@ export default function AccountsPage() {
                           onClick={() => handlePauseWarmup(account.id)}
                           className="border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10"
                         >
-                          <Pause className="h-3 w-3" />
+                          <Pause className="h-3 w-3 mr-1" />
+                          Pause Warmup
                         </Button>
                       )}
 
@@ -1032,8 +1130,8 @@ export default function AccountsPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {devices.map((device) => (
-                <Card key={device.id} className="bg-gray-800 border-gray-700">
+              {devices.map((device, index) => (
+                <Card key={device?.id || `device-${index}`} className="bg-gray-800 border-gray-700">
                   <CardContent className="pt-4">
                     <div className="flex items-center gap-3 mb-3">
                       <div className="p-2 bg-green-600 rounded-lg">
@@ -1060,7 +1158,7 @@ export default function AccountsPage() {
                         Manage
                       </Button>
                       <Button size="sm" variant="outline" className="text-xs">
-                        <Play className="h-3 w-3" />
+                        <Flame className="h-3 w-3 text-orange-400" />
                       </Button>
                     </div>
                   </CardContent>

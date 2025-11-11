@@ -4,6 +4,14 @@
 
 This document details all available TikTok automation actions for account warm-up using ADB commands through the MoreLogin cloud phones.
 
+> **Important:** Each warm-up session must start with the target cloud phone powered on. Use the `POST /api/cloudphone/powerOn` endpoint (or MoreLogin desktop GUI) to start the device before sending any ADB commands. Example payload:
+> ```json
+> {
+>   "id": 1670200598761170
+> }
+> ```
+> A success response returns `{"code": 0, ...}`. If the device is already running, the API returns code `33324`.
+
 ## Available Actions
 
 ### Main Feed Actions

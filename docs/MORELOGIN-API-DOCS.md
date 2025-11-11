@@ -497,10 +497,22 @@ Batch modify cloud phone settings (proxy, location, etc.)
 
 **Endpoint:** `POST /api/cloudphone/delete/batch`
 
+**Description:** Batch delete cloud phone profiles. The MoreLogin application needs to be updated to version 2.9.0 and above.
+
 **Request Body:**
 ```json
 {
   "ids": [1571806316503059]
+}
+```
+
+**Return Data:**
+```json
+{
+  "code": 0,  // Return result code 0:Normal Other codes are exceptions.
+  "msg": "",  // Error message
+  "data": {},  // The operation returns data
+  "requestId": ""   // Operation Request ID
 }
 ```
 
@@ -698,73 +710,262 @@ Resets cloud phone to factory state.
 
 ## ADB Connection
 
-### 1. Enable ADB
+MoreLogin Cloud Phones support ADB (Android Debug Bridge) for automated mobile app control. This enables programmatic interaction with TikTok and other mobile apps for warmup and automation purposes.
 
-First, enable ADB for your cloud phone using the API:
+### 1. Enable ADB for Cloud Phone
 
-```javascript
-await axios.post(
-  'https://api.morelogin.com/api/cloudphone/updateAdb',
-  {
-    enableAdb: true,
-    ids: [1571806316503059]
-  },
-  { headers: generateMoreLoginHeaders(apiId, secretKey) }
-);
-```
-
-### 2. Get ADB Connection Info
-
-Fetch cloud phone details to get ADB connection information:
+Use the **MoreLogin API "Cloud Phone" - "update Cloud Phone ADB status" interface** to enable ADB:
 
 ```javascript
 const response = await axios.post(
-  'https://api.morelogin.com/api/cloudphone/page',
-  { pageNo: 1, pageSize: 10 },
+  `${moreloginApiUrl}/api/cloudphone/updateAdb`,
+  {
+    ids: [cloudPhoneId],
+    enableAdb: true
+  },
   { headers: generateMoreLoginHeaders(apiId, secretKey) }
 );
 
-const phone = response.data.data.dataList[0];
-const { adbIp, adbPort, adbPassword } = phone.adbInfo;
+if (response.data.code === 0) {
+  console.log('ADB enabled successfully');
+}
 ```
 
-### 3. Connect via ADB
+**Parameters:**
+- `ids` (array): Array of cloud phone IDs to enable ADB for
+- `enableAdb` (boolean): Set to `true` to enable ADB
+
+### 2. Get ADB Connection Information
+
+After enabling ADB, retrieve the connection details from the cloud phone profile:
+
+```javascript
+const response = await axios.post(
+  `${moreloginApiUrl}/api/cloudphone/page`,
+  { pageNo: 1, pageSize: 20 },
+  { headers: generateMoreLoginHeaders(apiId, secretKey) }
+);
+
+const phone = response.data.data.dataList.find(p => p.id === cloudPhoneId);
+if (phone?.adbInfo?.success === 1) {
+  const { adbIp, adbPort, adbPassword } = phone.adbInfo;
+  console.log(`ADB Connection: ${adbIp}:${adbPort} (Password: ${adbPassword})`);
+}
+```
+
+**ADB Info Response:**
+- `adbIp`: IP address for ADB connection
+- `adbPort`: Port number for ADB connection
+- `adbPassword`: Authentication password
+- `success`: Status indicator (1 = ready)
+
+### 3. Connect and Authenticate via ADB
 
 ```bash
-# Connect to device
-adb connect 192.168.1.100:5555
+# Step 1: Connect to the ADB device
+adb connect <adbIp>:<adbPort>
 
-# Authenticate
-adb -s 192.168.1.100:5555 shell abc123
+# Step 2: Authenticate with password (if required)
+adb -s <adbIp>:<adbPort> shell <adbPassword>
+
+# Step 3: Verify connection
+adb devices
 ```
 
-### 4. Common ADB Commands for TikTok Automation
+**Example:**
+```bash
+adb connect 98.98.125.30:20434
+adb -s 98.98.125.30:20434 shell 5R12gXSM
+adb devices
+```
+
+### 4. ADB Automation Functions
+
+Use these ADB commands for TikTok automation (adapted from MoreLogin documentation):
+
+```javascript
+// Tap at coordinates
+function tap(deviceId, x, y) {
+  execSync(`adb -s ${deviceId} shell input tap ${x} ${y}`);
+}
+
+// Swipe gesture
+function swipe(deviceId, startX, startY, endX, endY, duration = 100) {
+  execSync(`adb -s ${deviceId} shell input swipe ${startX} ${startY} ${endX} ${endY} ${duration}`);
+}
+
+// Launch app
+function launchApp(deviceId, packageName) {
+  execSync(`adb -s ${deviceId} shell am start -n ${packageName}`);
+}
+
+// Input text
+function inputText(deviceId, text) {
+  // Escape special characters and spaces
+  const escapedText = text.replace(/"/g, '\\"').replace(/\s/g, '%s');
+  execSync(`adb -s ${deviceId} shell "input text \\"${escapedText}\\""`);
+}
+
+// Send key event
+function keyEvent(deviceId, keyCode) {
+  execSync(`adb -s ${deviceId} shell input keyevent ${keyCode}`);
+}
+
+// Take screenshot and save locally
+function takeScreenshot(deviceId, localPath) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const remoteFile = `/sdcard/screenshot_${timestamp}.png`;
+  const localFile = `${localPath}/screenshot_${timestamp}.png`;
+
+  execSync(`adb -s ${deviceId} shell screencap -p ${remoteFile}`);
+  execSync(`adb -s ${deviceId} pull ${remoteFile} ${localFile}`);
+  execSync(`adb -s ${deviceId} shell rm ${remoteFile}`);
+
+  return localFile;
+}
+```
+
+### 5. Common ADB Commands for TikTok Automation
 
 ```bash
-# Launch TikTok
-adb -s 192.168.1.100:5555 shell am start -n com.zhiliaoapp.musically/.MainActivity
+# Device Management
+adb -s <device> devices                    # List connected devices
+adb -s <device> shell getprop ro.product.model  # Get device model
+adb -s <device> shell getprop sys.boot_completed  # Check if device is ready
 
-# Tap at coordinates (X, Y)
-adb -s 192.168.1.100:5555 shell input tap 500 1000
+# App Management
+adb -s <device> shell am start -n com.zhiliaoapp.musically/.MainActivity  # Launch TikTok
+adb -s <device> shell pm list packages    # List installed apps
+adb -s <device> shell am force-stop com.zhiliaoapp.musically  # Stop TikTok
 
-# Swipe (scroll) - X1 Y1 X2 Y2 duration_ms
-adb -s 192.168.1.100:5555 shell input swipe 540 1500 540 500 400
+# Touch Input (Core Automation)
+adb -s <device> shell input tap 540 960   # Tap center screen
+adb -s <device> shell input swipe 540 1400 540 400 1000  # Scroll down
+adb -s <device> shell input swipe 540 400 540 1400 1000   # Scroll up
 
-# Input text (spaces as %s)
-adb -s 192.168.1.100:5555 shell input text "Check%sout%sminehedge.com"
+# Text Input
+adb -s <device> shell input text "hello%sworld"  # Input with spaces
+adb -s <device> shell input keyevent 66         # Press Enter
+adb -s <device> shell input keyevent 4          # Press Back
 
-# Press back button
-adb -s 192.168.1.100:5555 shell input keyevent 4
-
-# Take screenshot
-adb -s 192.168.1.100:5555 shell screencap -p /sdcard/screenshot.png
-
-# Upload file to device
-adb -s 192.168.1.100:5555 push local_video.mp4 /sdcard/DCIM/video.mp4
-
-# Get list of installed apps
-adb -s 192.168.1.100:5555 shell pm list packages
+# File Operations
+adb -s <device> push local.mp4 /sdcard/video.mp4    # Upload file
+adb -s <device> pull /sdcard/screenshot.png .      # Download file
+adb -s <device> shell ls /sdcard/                  # List device files
 ```
+
+### 6. TikTok-Specific ADB Automation
+
+```javascript
+// Complete TikTok warmup sequence
+async function tiktokWarmup(deviceId) {
+  // Launch TikTok
+  launchApp(deviceId, 'com.zhiliaoapp.musically');
+
+  await sleep(5000); // Wait for app to load
+
+  // Scroll through For You feed (10 times)
+  for (let i = 0; i < 10; i++) {
+    await sleep(3000); // Watch video
+
+    // Random like (30% chance)
+    if (Math.random() < 0.3) {
+      tap(deviceId, 900, 1200); // Like button
+      await sleep(1000);
+    }
+
+    // Scroll to next video
+    swipe(deviceId, 540, 1400, 540, 400, 800);
+    await sleep(2000);
+  }
+
+  // Search for content
+  tap(deviceId, 900, 150); // Search icon
+  await sleep(1000);
+  inputText(deviceId, 'crypto%strading');
+  keyEvent(deviceId, 66); // Enter
+  await sleep(3000);
+
+  // Browse search results
+  for (let i = 0; i < 5; i++) {
+    swipe(deviceId, 540, 1300, 540, 600, 600);
+    await sleep(2000);
+  }
+
+  keyEvent(deviceId, 4); // Back to main feed
+}
+```
+
+### 7. Troubleshooting ADB Issues
+
+**Connection Problems:**
+- Ensure ADB is enabled via MoreLogin API before connecting
+- Wait 10-15 seconds after enabling ADB before attempting connection
+- Verify cloud phone is powered on and running
+
+**Authentication Issues:**
+- Use the exact `adbPassword` from the API response
+- Some devices may not require password authentication
+
+**Shell Access Limitations:**
+- Some cloud providers restrict full shell access for security
+- Core automation commands (`input tap`, `input swipe`) usually work
+- Advanced shell commands may be blocked
+
+**Device Not Ready:**
+- Check `sys.boot_completed` property
+- Wait longer after power-on for device initialization
+- Verify proxy configuration if device fails to start
+
+### 8. Node.js ADB Helper Implementation
+
+```javascript
+import { execSync } from 'child_process';
+
+class ADBHelper {
+  constructor(deviceId) {
+    this.deviceId = deviceId;
+  }
+
+  runCommand(command) {
+    const fullCommand = `adb -s ${this.deviceId} ${command}`;
+    return execSync(fullCommand, { encoding: 'utf8' });
+  }
+
+  tap(x, y) {
+    this.runCommand(`shell input tap ${x} ${y}`);
+  }
+
+  swipe(startX, startY, endX, endY, duration = 300) {
+    this.runCommand(`shell input swipe ${startX} ${startY} ${endX} ${endY} ${duration}`);
+  }
+
+  inputText(text) {
+    const escaped = text.replace(/"/g, '\\"');
+    this.runCommand(`shell "input text \\"${escaped}\\""`);
+  }
+
+  launchApp(packageName) {
+    this.runCommand(`shell monkey -p ${packageName} -c android.intent.category.LAUNCHER 1`);
+  }
+
+  keyEvent(code) {
+    this.runCommand(`shell input keyevent ${code}`);
+  }
+}
+
+// Usage
+const adb = new ADBHelper('98.98.125.30:20434');
+adb.tap(540, 960); // Tap center
+adb.swipe(540, 1400, 540, 400, 1000); // Scroll
+adb.launchApp('com.zhiliaoapp.musically'); // Launch TikTok
+```
+
+### References
+
+- [MoreLogin ADB Connection Guide](https://support.morelogin.com/en/articles/10204764-adb-connection-cloud-phone)
+- [Android ADB Documentation](https://developer.android.com/tools/adb)
+- [ADB Shell Commands](https://adbshell.com/)
 
 ---
 
