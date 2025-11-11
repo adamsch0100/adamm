@@ -23,11 +23,7 @@ import {
 const navigation = [
   { name: 'Overview', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Campaigns', href: '/dashboard/campaigns', icon: Sparkles },
-  { name: 'Account Warmup', href: '/dashboard/warmup', icon: Flame, important: true },
-  { name: 'Queue', href: '/dashboard/queue', icon: Clock },
-  { name: 'Devices', href: '/dashboard/devices', icon: Smartphone },
   { name: 'Accounts', href: '/dashboard/accounts', icon: Users },
-  { name: 'Products', href: '/dashboard/products', icon: Package },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]

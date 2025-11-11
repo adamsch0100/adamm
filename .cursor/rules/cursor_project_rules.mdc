@@ -1,0 +1,166 @@
+---
+description: Apply these rules when making changes to the project
+globs:
+alwaysApply: true
+---
+
+Update this rule if user requested changes to the project requirement, etc.
+## Project Overview
+
+*   **Type:** Web Application
+*   **Description:** PostPulse.io is an AI-driven platform designed to automate content creation, posting, engagement, and monetization across major social media platforms (TikTok, Instagram, X/Twitter, YouTube, and Reddit).
+*   **Primary Goal:** Help users generate revenue through organic traffic by automating social media content workflows starting with personal campaigns and expanding to a freemium subscription model.
+
+## Project Structure
+
+### Framework-Specific Routing
+
+*   **Directory Rules:**
+
+    *   Next.js 14 (App Router): Use `app/[route]/page.tsx` conventions.
+    *   Next.js (Pages Router): Use `pages/[route].tsx` pattern.
+    *   React Router 6: Use `src/routes/` with `createBrowserRouter()`.
+
+### Core Directories
+
+*   **Versioned Structure:**
+
+    *   app: Next.js 14 App Router directory for pages and layouts.
+    *   app/api: Next.js 14 API routes with Route Handlers.
+    *   components: Shared React components for UI (e.g., CampaignForm, ContentTrigger).
+    *   lib: Utility modules (Supabase client, n8n utils, posting abstractions).
+    *   public: Static assets (images, icons).
+    *   styles: Global CSS and utility classes (e.g., Tailwind config).
+
+### Key Files
+
+*   **Stack-Versioned Patterns:**
+
+    *   app/layout.tsx: Next.js 14 root layout.
+    *   app/page.tsx: Next.js 14 landing/home page.
+    *   app/auth/login/page.tsx: Login page using Supabase Auth edge functions.
+    *   app/campaigns/create/page.tsx: Wizard-style campaign creation flow.
+    *   app/accounts/page.tsx: MoreLogin account management page.
+    *   app/dashboard/[campaignId]/page.tsx: Campaign dashboard with analytics.
+    *   app/api/workflows/upload.ts: Endpoint to trigger n8n workflows for generation/posting.
+    *   next.config.js: Next.js configuration (env vars, image domains).
+
+## Tech Stack Rules
+
+*   **Version Enforcement:**
+
+    *   next@14: App Router required; no `getInitialProps` or Pages Router patterns.
+    *   react@18: Functional components with hooks and Server Components.
+    *   supabase@^2.0: Enforce Row Level Security (RLS); use edge functions for server logic.
+    *   n8n@^1.0: Self-hosted/cloud workflows; trigger via REST API webhooks.
+    *   morelogin@latest: Profile API via Selenium; abstract in lib module.
+    *   upload-post-api@latest: Use official endpoints for TikTok/IG/X/YouTube posting.
+    *   praw@latest: Use PRAW for Reddit posting with rate limit handling.
+    *   openai@gpt-4: Use streaming API and caching via edge functions.
+    *   typeform@latest: Capture leads via webhooks into Supabase `leads` table.
+    *   whop@latest: Server-side payment flow with webhook verification.
+    *   railway@latest: Use Railway CLI; manage env vars in project settings.
+
+## PRD Compliance
+
+*   **Non-Negotiable:**
+
+    *   "Wizard-style campaign creation flow": Implement multi-step form at `app/campaigns/create/page.tsx` with state persisted per step.
+    *   "Owner/Admin and standard users (own data only)": Enforce in Supabase policies and server-side checks; Admin dashboard at `app/admin`.
+    *   "Internal counters for impressions, clicks, conversions, and revenue": Track in Postgres tables with triggers or scheduled jobs; surface in `app/dashboard`.
+
+## App Flow Integration
+
+*   **Stack-Aligned Flow:**
+
+    *   Next.js 14 Auth Flow → `app/auth/login/page.tsx` uses Supabase Auth edge functions.
+    *   Campaign Creation → `app/campaigns/create/page.tsx` multi-step wizard persists to `campaigns` table.
+    *   Accounts Page → `app/accounts/page.tsx` allows linking MoreLogin profiles and Upload-Post accounts.
+    *   Dashboard → `app/dashboard/[campaignId]/page.tsx` fetches analytics (impressions, clicks, revenue).
+    *   Workflow Trigger → `app/api/workflows/upload.ts` invokes n8n to generate and post content.
+
+## Best Practices
+
+*   Next.js
+
+    *   Adopt the App Router for all new routes and nested layouts.
+    *   Use React Server Components and streaming for data-heavy pages.
+    *   TypeScript strict mode and ESLint with `@next/next/recommended`.
+    *   Prefetch and cache data with `fetch` and `cache()` for performance.
+
+*   Supabase
+
+    *   Define and test Row Level Security policies for each table.
+    *   Use Edge Functions for sensitive operations (e.g., sending DMs, payment verifications).
+    *   Version migrations in `/supabase/migrations` directory.
+
+*   n8n
+
+    *   Store credentials in env vars; do not commit secrets.
+    *   Use webhooks to connect Next.js and n8n workflows.
+    *   Log workflow results to Supabase for auditing.
+
+*   MoreLogin
+
+    *   Abstract API calls in a dedicated service module.
+    *   Implement retry/exponential backoff for Selenium interactions.
+    *   Secure session credentials in Supabase and env vars.
+
+*   Posting APIs (Upload-Post API, PRAW)
+
+    *   Centralize posting logic; handle platform-specific rate limits.
+    *   Validate and sanitize media payloads before submission.
+    *   Retry on transient errors with backoff.
+
+*   Grok/OpenAI
+
+    *   Abstract prompt templates; store in `/lib/ai.ts`.
+    *   Use streaming responses and incremental DB updates.
+    *   Cache frequent prompts/responses to minimize costs.
+
+*   Typeform/ConvertKit
+
+    *   Use webhooks to ingest leads into Supabase `leads` table.
+    *   Validate payloads and apply sanitization.
+
+*   Whop
+
+    *   Verify payment webhooks server-side in edge functions.
+    *   Sync purchase events to Supabase and grant subscription entitlements.
+
+*   Google Sheets API (Optional)
+
+    *   Use service account JSON stored in env vars.
+    *   Write logs or exports from n8n; read-only on frontend.
+
+*   Railway
+
+    *   Define all env vars in Railway dashboard.
+    *   Automate deployments via GitHub integration.
+
+## Rules
+
+*   Derive folder/file patterns **directly** from `techStackDoc` versions.
+*   If Next.js 14 App Router: Enforce `app/` directory with nested route folders.
+*   If Pages Router: Use `pages/*.tsx` flat structure.
+*   Mirror this logic for React Router, SvelteKit, etc.
+*   Never mix version patterns (e.g., no `pages/` in App Router projects).
+
+## Rules Metrics
+
+Before starting the project development, create a metrics file in the root of the project called
+
+`cursor_metrics.md`.
+
+### Instructions:
+
+*   Each time a cursor rule is used as context, update `cursor_metrics.md`.
+*   Use the following format for `cursor_metrics.md:`
+    # Rules Metrics
+    
+    ## Usage
+    The number of times rules is used as context
+
+    *   rule-name.mdc: 5
+    *   another-rule.mdc: 2
+    *   ...other rules

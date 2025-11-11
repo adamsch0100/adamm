@@ -1,96 +1,123 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { Loader2, Upload, Video, Image as ImageIcon, CheckCircle2 } from 'lucide-react'
-
-const PLATFORMS = [
-  { id: 'tiktok', name: 'TikTok', icon: '🎵', color: 'from-gray-700 to-gray-600' },
-  { id: 'instagram', name: 'Instagram', icon: '📸', color: 'from-pink-600 to-rose-500' },
-  { id: 'youtube', name: 'YouTube', icon: '▶️', color: 'from-red-600 to-orange-500' },
-  { id: 'facebook', name: 'Facebook', icon: '👥', color: 'from-blue-600 to-blue-500' },
-  { id: 'linkedin', name: 'LinkedIn', icon: '💼', color: 'from-blue-700 to-blue-600' },
-  { id: 'twitter', name: 'X (Twitter)', icon: '𝕏', color: 'from-gray-600 to-slate-500' }
-]
+import { Loader2, Upload, Calendar, CheckCircle2 } from 'lucide-react'
+import type { Campaign, SocialAccount } from '@/types'
 
 interface ContentUploaderProps {
   onSuccess?: () => void
 }
 
 export function ContentUploader({ onSuccess }: ContentUploaderProps) {
-  const [uploading, setUploading] = useState(false)
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [videoUrl, setVideoUrl] = useState('')
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
+  const [posting, setPosting] = useState(false)
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [accounts, setAccounts] = useState<SocialAccount[]>([])
   const supabase = createClient()
 
-  const togglePlatform = (platformId: string) => {
+  // Form state
+  const [selectedCampaignId, setSelectedCampaignId] = useState('')
+  const [content, setContent] = useState('')
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
+  const [selectedAccountIds, setSelectedAccountIds] = useState<number[]>([])
+  const [scheduleTime, setScheduleTime] = useState('')
+  const [mediaUrls, setMediaUrls] = useState<string[]>([])
+
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  const fetchData = async () => {
+    try {
+      // Fetch campaigns
+      const { data: campaignsData } = await supabase
+        .from('campaigns')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      // Fetch accounts
+      const { data: accountsData } = await supabase
+        .from('social_accounts')
+        .select('*')
+        .eq('status', 'active')
+        .order('platform')
+
+      setCampaigns(campaignsData || [])
+      setAccounts(accountsData || [])
+    } catch (error) {
+      console.error('Failed to fetch data:', error)
+    }
+  }
+
+  const togglePlatform = (platform: string) => {
     setSelectedPlatforms(prev =>
-      prev.includes(platformId)
-        ? prev.filter(id => id !== platformId)
-        : [...prev, platformId]
+      prev.includes(platform)
+        ? prev.filter(p => p !== platform)
+        : [...prev, platform]
     )
   }
 
-  const handleUpload = async () => {
-    if (!title || !videoUrl || selectedPlatforms.length === 0) {
-      toast.error('Please fill in all required fields and select at least one platform')
+  const toggleAccount = (accountId: number) => {
+    setSelectedAccountIds(prev =>
+      prev.includes(accountId)
+        ? prev.filter(id => id !== accountId)
+        : [...prev, accountId]
+    )
+  }
+
+  const handlePost = async () => {
+    if (!selectedCampaignId || !content.trim() || selectedPlatforms.length === 0 || selectedAccountIds.length === 0) {
+      toast.error('Please fill in all required fields')
       return
     }
 
-    setUploading(true)
+    setPosting(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        toast.error('Please log in to continue')
-        return
-      }
-
-      // Upload video via Upload-Post
-      const response = await fetch('http://localhost:3000/api/upload-post/upload-video', {
+      const response = await fetch('/api/post', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          video_url: videoUrl,
-          title,
-          description,
-          platforms: selectedPlatforms
+          campaignId: selectedCampaignId,
+          content: content.trim(),
+          platforms: selectedPlatforms,
+          accountIds: selectedAccountIds,
+          scheduleTime: scheduleTime || undefined,
+          mediaUrls
         })
       })
 
-      const data = await response.json()
-
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to upload video')
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to schedule post')
       }
 
-      toast.success('Video uploaded successfully!')
-      
-      // Reset form
-      setTitle('')
-      setDescription('')
-      setVideoUrl('')
-      setSelectedPlatforms([])
+      const result = await response.json()
 
-      // Call success callback
+      toast.success(`Post scheduled successfully! ${result.queueItems} items queued.`)
+
+      // Reset form
+      setContent('')
+      setSelectedPlatforms([])
+      setSelectedAccountIds([])
+      setScheduleTime('')
+      setMediaUrls([])
+
       if (onSuccess) onSuccess()
 
     } catch (error: any) {
-      console.error('Upload error:', error)
-      toast.error(error.message || 'Failed to upload video')
+      console.error('Post error:', error)
+      toast.error(error.message || 'Failed to schedule post')
     } finally {
-      setUploading(false)
+      setPosting(false)
     }
   }
 
@@ -98,137 +125,173 @@ export function ContentUploader({ onSuccess }: ContentUploaderProps) {
     <Card className="card-glass">
       <CardHeader>
         <CardTitle className="text-2xl font-black bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent flex items-center gap-3">
-          <Upload className="h-6 w-6 text-blue-400" />
-          Upload Content
+          <Upload className="h-6 w-6" />
+          Post Content
         </CardTitle>
-        <CardDescription className="text-gray-300 text-base">
-          Upload and publish your video across multiple social platforms
+        <CardDescription className="text-gray-400">
+          Schedule posts across multiple platforms and accounts
         </CardDescription>
       </CardHeader>
+
       <CardContent className="space-y-6">
-        {/* Video URL */}
-        <div className="space-y-3">
-          <Label htmlFor="videoUrl" className="label-glass text-base">
-            Video URL <span className="text-red-400">*</span>
-          </Label>
-          <Input
-            id="videoUrl"
-            type="url"
-            placeholder="https://example.com/video.mp4"
-            value={videoUrl}
-            onChange={(e) => setVideoUrl(e.target.value)}
-            className="input-glass text-base py-3"
-          />
-          <p className="text-sm text-gray-400">
-            Provide a direct URL to your video file (MP4 format recommended)
-          </p>
+        {/* Campaign Selection */}
+        <div className="space-y-2">
+          <Label className="text-white">Campaign *</Label>
+          <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
+            <SelectTrigger className="input-glass">
+              <SelectValue placeholder="Select a campaign" />
+            </SelectTrigger>
+            <SelectContent>
+              {campaigns.map((campaign) => (
+                <SelectItem key={campaign.id} value={campaign.id}>
+                  {campaign.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
-        {/* Title */}
-        <div className="space-y-3">
-          <Label htmlFor="title" className="label-glass text-base">
-            Title <span className="text-red-400">*</span>
-          </Label>
-          <Input
-            id="title"
-            type="text"
-            placeholder="Amazing video title..."
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="input-glass text-base py-3"
-            maxLength={100}
-          />
-          <p className="text-sm text-gray-400">
-            {title.length}/100 characters
-          </p>
-        </div>
-
-        {/* Description */}
-        <div className="space-y-3">
-          <Label htmlFor="description" className="label-glass text-base">
-            Description (Optional)
-          </Label>
+        {/* Content */}
+        <div className="space-y-2">
+          <Label className="text-white">Content *</Label>
           <Textarea
-            id="description"
-            placeholder="Describe your video..."
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="input-glass text-base resize-none"
-            rows={4}
-            maxLength={2000}
+            placeholder="Enter your post content..."
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            className="input-glass min-h-24"
           />
-          <p className="text-sm text-gray-400">
-            {description.length}/2000 characters
-          </p>
         </div>
 
         {/* Platform Selection */}
-        <div className="space-y-4">
-          <Label className="label-glass text-base">
-            Select Platforms <span className="text-red-400">*</span>
-          </Label>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {PLATFORMS.map((platform) => (
-              <div 
+        <div className="space-y-3">
+          <Label className="text-white text-base">Platforms *</Label>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { id: 'tiktok', name: 'TikTok', icon: '🎵' },
+              { id: 'instagram', name: 'Instagram', icon: '📸' },
+              { id: 'youtube', name: 'YouTube', icon: '▶️' },
+              { id: 'twitter', name: 'X/Twitter', icon: '𝕏' },
+              { id: 'facebook', name: 'Facebook', icon: '👥' },
+              { id: 'linkedin', name: 'LinkedIn', icon: '💼' }
+            ].map((platform) => (
+              <div
                 key={platform.id}
                 onClick={() => togglePlatform(platform.id)}
-                className={`p-4 rounded-xl bg-gradient-to-br ${platform.color} cursor-pointer transition-all duration-300 ${
+                className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
                   selectedPlatforms.includes(platform.id)
-                    ? 'ring-2 ring-green-400 shadow-xl scale-105'
-                    : 'opacity-60 hover:opacity-100'
+                    ? 'border-blue-400 bg-blue-500/10'
+                    : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
                 }`}
               >
-                <div className="text-center space-y-2">
-                  <span className="text-4xl block">{platform.icon}</span>
-                  <span className="text-sm text-white font-semibold block">{platform.name}</span>
-                  {selectedPlatforms.includes(platform.id) && (
-                    <CheckCircle2 className="h-5 w-5 text-green-400 mx-auto" />
-                  )}
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{platform.icon}</span>
+                  <span className="text-sm font-medium text-white">{platform.name}</span>
                 </div>
               </div>
             ))}
           </div>
-          <p className="text-sm text-gray-400">
-            {selectedPlatforms.length === 0 
-              ? 'Click to select platforms'
-              : `${selectedPlatforms.length} platform(s) selected`
-            }
+        </div>
+
+        {/* Account Selection */}
+        <div className="space-y-3">
+          <Label className="text-white text-base">Accounts *</Label>
+          <div className="grid grid-cols-1 gap-3 max-h-48 overflow-y-auto">
+            {accounts
+              .filter(account => selectedPlatforms.includes(account.platform))
+              .map((account) => (
+                <div
+                  key={account.id}
+                  onClick={() => toggleAccount(account.id)}
+                  className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                    selectedAccountIds.includes(account.id)
+                      ? 'border-blue-400 bg-blue-500/10'
+                      : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                      <span className="text-white font-bold text-sm">
+                        {account.platform === 'tiktok' ? '🎵' :
+                         account.platform === 'instagram' ? '📸' :
+                         account.platform === 'twitter' ? '𝕏' :
+                         account.platform === 'youtube' ? '▶️' :
+                         account.platform === 'facebook' ? '👥' :
+                         account.platform === 'linkedin' ? '💼' : '📱'}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-white">
+                        @{account.username}
+                      </p>
+                      <p className="text-sm text-gray-400 capitalize">
+                        {account.platform}
+                      </p>
+                    </div>
+                    {selectedAccountIds.includes(account.id) && (
+                      <CheckCircle2 className="h-5 w-5 text-blue-400 ml-auto" />
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
+          {accounts.filter(account => selectedPlatforms.includes(account.platform)).length === 0 && selectedPlatforms.length > 0 && (
+            <p className="text-sm text-yellow-400">
+              No active accounts found for selected platforms. Add accounts first.
+            </p>
+          )}
+        </div>
+
+        {/* Schedule Time */}
+        <div className="space-y-2">
+          <Label className="text-white flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Schedule Time (Optional)
+          </Label>
+          <Input
+            type="datetime-local"
+            value={scheduleTime}
+            onChange={(e) => setScheduleTime(e.target.value)}
+            className="input-glass"
+          />
+          <p className="text-xs text-gray-400">
+            Leave empty to post immediately
           </p>
         </div>
 
-        {/* Upload Button */}
-        <div className="pt-4 border-t border-white/10">
-          <Button
-            onClick={handleUpload}
-            disabled={uploading || !title || !videoUrl || selectedPlatforms.length === 0}
-            className="w-full btn-gradient text-lg py-4 font-bold shadow-xl shadow-blue-500/30"
-          >
-            {uploading ? (
-              <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Uploading to {selectedPlatforms.length} platform(s)...
-              </>
-            ) : (
-              <>
-                <Upload className="mr-2 h-5 w-5" />
-                Upload & Publish
-              </>
-            )}
-          </Button>
-        </div>
-
-        {/* Info Note */}
-        <div className="p-4 rounded-lg bg-blue-600/10 border border-blue-500/30">
-          <p className="text-sm text-blue-100/80 leading-relaxed">
-            💡 <strong>Tip:</strong> Make sure you've added your social accounts on the{' '}
-            <a href="/dashboard/accounts" className="text-blue-400 underline hover:text-blue-300">
-              Accounts page
-            </a>{' '}
-            before uploading content. Your video will be posted to all selected platforms automatically.
+        {/* Media URLs */}
+        <div className="space-y-2">
+          <Label className="text-white">Media URLs (Optional)</Label>
+          <Textarea
+            placeholder="Enter media URLs, one per line..."
+            value={mediaUrls.join('\n')}
+            onChange={(e) => setMediaUrls(e.target.value.split('\n').filter(url => url.trim()))}
+            className="input-glass min-h-20"
+          />
+          <p className="text-xs text-gray-400">
+            One URL per line for videos/images to attach
           </p>
         </div>
+
+        {/* Post Button */}
+        <Button
+          onClick={handlePost}
+          disabled={posting || !selectedCampaignId || !content.trim() || selectedPlatforms.length === 0 || selectedAccountIds.length === 0}
+          className="btn-gradient w-full"
+          size="lg"
+        >
+          {posting ? (
+            <>
+              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+              Scheduling Post...
+            </>
+          ) : (
+            <>
+              <Upload className="h-5 w-5 mr-2" />
+              Schedule Post
+            </>
+          )}
+        </Button>
       </CardContent>
     </Card>
   )
 }
-

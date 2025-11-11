@@ -420,10 +420,91 @@ class UploadPostService {
     try {
       const response = await this.client.get('/api/uploadposts/users');
       
-      return response.data.users || response.data || [];
+      return response.data.profiles || response.data.users || response.data || [];
     } catch (error) {
       console.error('Get user profiles error:', error.response?.data || error.message);
       throw new Error(error.response?.data?.message || 'Failed to get user profiles');
+    }
+  }
+
+  /**
+   * Alias for getUserProfiles for consistency
+   * @returns {Promise<Array>} List of user profiles
+   */
+  async listProfiles() {
+    return this.getUserProfiles();
+  }
+
+  /**
+   * Delete user profile
+   * @param {string} username - Username to delete
+   * @returns {Promise<Object>} Deletion result
+   */
+  async deleteProfile(username) {
+    try {
+      const response = await this.client.delete('/api/uploadposts/users', {
+        data: { username }
+      });
+      
+      return {
+        success: true,
+        username: username,
+        message: response.data?.message || 'Profile deleted successfully'
+      };
+    } catch (error) {
+      console.error('Delete profile error:', error.response?.data || error.message);
+      throw new Error(error.response?.data?.message || 'Failed to delete profile');
+    }
+  }
+
+  /**
+   * Get Facebook pages for a profile
+   * @param {string} profile - Optional profile username
+   * @returns {Promise<Array>} List of Facebook pages
+   */
+  async getFacebookPages(profile = null) {
+    try {
+      const url = profile ? `/api/uploadposts/facebook/pages?profile=${profile}` : '/api/uploadposts/facebook/pages';
+      const response = await this.client.get(url);
+      
+      return response.data.pages || response.data || [];
+    } catch (error) {
+      console.error('Get Facebook pages error:', error.response?.data || error.message);
+      throw new Error(error.response?.data?.message || 'Failed to get Facebook pages');
+    }
+  }
+
+  /**
+   * Get LinkedIn pages for a profile
+   * @param {string} profile - Optional profile username
+   * @returns {Promise<Array>} List of LinkedIn pages
+   */
+  async getLinkedInPages(profile = null) {
+    try {
+      const url = profile ? `/api/uploadposts/linkedin/pages?profile=${profile}` : '/api/uploadposts/linkedin/pages';
+      const response = await this.client.get(url);
+      
+      return response.data.pages || response.data || [];
+    } catch (error) {
+      console.error('Get LinkedIn pages error:', error.response?.data || error.message);
+      throw new Error(error.response?.data?.message || 'Failed to get LinkedIn pages');
+    }
+  }
+
+  /**
+   * Get Pinterest boards for a profile
+   * @param {string} profile - Optional profile username
+   * @returns {Promise<Array>} List of Pinterest boards
+   */
+  async getPinterestBoards(profile = null) {
+    try {
+      const url = profile ? `/api/uploadposts/pinterest/boards?profile=${profile}` : '/api/uploadposts/pinterest/boards';
+      const response = await this.client.get(url);
+      
+      return response.data.boards || response.data || [];
+    } catch (error) {
+      console.error('Get Pinterest boards error:', error.response?.data || error.message);
+      throw new Error(error.response?.data?.message || 'Failed to get Pinterest boards');
     }
   }
 }

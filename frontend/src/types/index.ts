@@ -55,29 +55,34 @@ export interface CloudPhone {
 }
 
 export interface SocialAccount {
-  id: number
+  id: number // bigint in database, but number in TypeScript
   user_id: string
-  cloud_phone_id?: number
   platform: Platform
   username?: string
+  display_name?: string
   email?: string
   phone_number?: string
   password_encrypted?: string
-  upload_post_profile_key?: string
-  upload_post_connected: boolean
+  auth_data?: any // JSONB field for encrypted credentials
   status: AccountStatus
-  verification_status: VerificationStatus
-  warmup_days: number
-  warmup_completed: boolean
-  warmup_strategy?: any
-  followers_count: number
-  following_count: number
-  posts_count: number
+  verification_status?: 'unverified' | 'pending' | 'verified' | 'failed'
+  upload_post_profile_key?: string
+  upload_post_connected?: boolean
+  cloud_phone_id?: number
+  warmup_days?: number
+  warmup_completed?: boolean
+  daily_post_limit: number
+  posts_today: number
+  last_post_at?: string
+  followers_count?: number
+  following_count?: number
+  posts_count?: number
   engagement_rate?: number
-  profile_data?: any
+  bio_link?: string
+  notes?: string
+  profile_data?: any // JSONB field for additional profile data
   created_at: string
-  last_activity?: string
-  last_warmup?: string
+  updated_at: string
 }
 
 export interface Proxy {
@@ -97,30 +102,20 @@ export interface Proxy {
 }
 
 export interface ContentPost {
-  id: number
+  id: number // bigint in database
   user_id: string
-  tiktok_account_id?: number
-  video_id?: string
-  video_url?: string
-  thumbnail_url?: string
-  video_generator?: VideoGenerator
-  caption?: string
-  hashtags?: string[]
+  campaign_id?: string // UUID reference to campaigns table
   topic?: string
+  content_data?: any // JSONB for content details
   target_platforms?: Platform[]
-  platform_specific_captions?: Record<Platform, string>
-  upload_post_status?: Record<Platform, string>
-  upload_post_ids?: Record<Platform, string>
-  upload_post_errors?: Record<Platform, string>
   status: ContentPostStatus
   total_views: number
   total_likes: number
   total_comments: number
   total_shares: number
-  platform_metrics?: Record<Platform, any>
-  generated_at?: string
-  posted_at?: string
+  platform_metrics?: any // JSONB for detailed metrics
   created_at: string
+  updated_at: string
 }
 
 export interface WarmupTemplate {
@@ -181,47 +176,38 @@ export interface OperatorSetting {
   updated_at: string
 }
 
-// Campaign Types
-export type CampaignStatus = 
-  | 'creating' 
-  | 'generating_script' 
-  | 'generating_videos' 
-  | 'downloading' 
-  | 'pending_review' 
-  | 'approved' 
-  | 'posting' 
-  | 'completed' 
-  | 'failed' 
+// Campaign Types (Updated to match DB schema)
+export type CampaignStatus =
+  | 'creating'
+  | 'generating_script'
+  | 'generating_videos'
+  | 'downloading'
+  | 'pending_review'
+  | 'approved'
+  | 'posting'
+  | 'completed'
+  | 'failed'
   | 'cancelled'
 
-export type TopicSource = 'auto' | 'manual'
-
-export interface VideoStatus {
-  id: string
-  status: 'queued' | 'in_progress' | 'completed' | 'failed'
-  progress: number
-  url?: string
-  thumbnail?: string
-  approved: boolean
-  rejected: boolean
-  index: number
-}
-
-export interface PostingStatus {
-  account_id: number
-  account_username: string
-  platform: Platform
-  video_index: number
-  status: 'pending' | 'posting' | 'posted' | 'failed'
-  posted_at?: string
-  error?: string
-}
-
 export interface Campaign {
+  id: string // UUID from database
+  user_id: string
+  name: string
+  keywords?: string
+  topics?: string
+  platforms?: Platform[]
+  content_json?: any
+  status: CampaignStatus
+  created_at: string
+  updated_at: string
+}
+
+// Legacy campaign type for backward compatibility
+export interface LegacyCampaign {
   id: number
   user_id: string
   name: string
-  topic_source: TopicSource
+  topic_source: 'auto' | 'manual'
   topic: string
   topic_metadata?: any
   video_count: number
@@ -251,6 +237,39 @@ export interface Campaign {
   total_posted: number
   total_failed: number
   results?: any
+}
+
+export interface VideoStatus {
+  id: string
+  status: 'queued' | 'in_progress' | 'completed' | 'failed'
+  progress: number
+  url?: string
+  thumbnail?: string
+  approved: boolean
+  rejected: boolean
+  index: number
+}
+
+export interface PostingStatus {
+  account_id: number
+  account_username: string
+  platform: Platform
+  video_index: number
+  status: 'pending' | 'posting' | 'posted' | 'failed'
+  posted_at?: string
+  error?: string
+}
+
+export interface Analytics {
+  id: string // UUID from database
+  post_id: number
+  campaign_id?: string
+  platform: Platform
+  impressions: number
+  clicks: number
+  conversions: number
+  revenue: number
+  recorded_at: string
 }
 
 // Platform-specific metadata
@@ -401,27 +420,16 @@ export interface LeadTrigger {
 }
 
 export interface Lead {
-  id: number
+  id: number // bigint in database
   user_id: string
-  social_account_id?: number
-  lead_username: string
-  lead_platform: string
-  lead_user_id?: string
-  trigger_id?: number
-  trigger_keyword?: string
+  campaign_id?: string // UUID reference to campaigns table
+  email?: string
+  lead_data?: any // JSONB for lead information
+  source?: string
+  status?: string
   captured_at: string
-  dm_sent: boolean
-  dm_sent_at?: string
-  dm_opened: boolean
-  dm_opened_at?: string
-  link_clicked: boolean
-  link_clicked_at?: string
-  converted: boolean
-  converted_at?: string
-  conversion_value: number
-  funnel_stage: 'lead' | 'engaged' | 'converted' | 'lost'
-  metadata: any
-  notes?: string
+  created_at: string
+  updated_at: string
 }
 
 export interface TwitterCarousel {

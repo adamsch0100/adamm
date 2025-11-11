@@ -1,0 +1,342 @@
+[
+  {
+    "id": 1,
+    "title": "Core Infrastructure Setup and Authentication",
+    "status": "pending",
+    "details": "Initialize Next.js 14+ with App Router, configure Supabase project with Postgres database, set up authentication with email/OAuth, implement JWT-based security with Row-Level Security (RLS). Create user roles (Owner/Admin, Standard User) with appropriate permissions. Set up Railway hosting with environment variables (SUPABASE_URL, SUPABASE_KEY, N8N_URL, MORELOGIN_KEY). Implement responsive UI foundation with Tailwind CSS. Create basic dashboard layout with role-based navigation.",
+    "priority": "high",
+    "subtasks": [
+      {
+        "id": 1,
+        "title": "Initialize Next.js 14+ Application with App Router and Tailwind CSS",
+        "status": "pending",
+        "details": "Use 'npx create-next-app@latest' with TypeScript and App Router options. Install and configure Tailwind CSS with custom configuration. Set up folder structure: app/(auth), app/(dashboard), components/ui, lib/utils. Configure next.config.js for production optimization. Set up basic layout components and global styles.",
+        "description": "Create a new Next.js 14+ project with App Router configuration and set up Tailwind CSS for responsive UI foundation. Configure TypeScript, ESLint, and basic project structure with proper folder organization for pages, components, and utilities.",
+        "dependencies": [],
+        "testStrategy": "Verify Next.js development server starts correctly, Tailwind classes render properly, TypeScript compilation works without errors"
+      },
+      {
+        "id": 2,
+        "title": "Configure Supabase Project and Database Schema",
+        "status": "pending",
+        "details": "Create new Supabase project and obtain API keys. Design database schema with users table (extending auth.users), roles table, and user_roles junction table. Implement RLS policies for each table based on user roles. Set up database functions for role management. Configure Supabase client in Next.js with environment variables.",
+        "description": "Set up Supabase project with Postgres database, create necessary tables for user management and application data, and configure Row-Level Security (RLS) policies for data protection.",
+        "dependencies": [
+          1
+        ],
+        "testStrategy": "Test database connections, verify RLS policies work correctly, validate schema constraints and relationships"
+      },
+      {
+        "id": 3,
+        "title": "Implement User Authentication with Email and OAuth",
+        "status": "pending",
+        "details": "Configure Supabase Auth settings for email and OAuth providers (Google, GitHub). Create authentication components: login, register, password reset forms. Implement middleware for route protection and session validation. Set up auth context provider for global state management. Create auth utilities for token handling and user session management.",
+        "description": "Set up Supabase Auth with email/password authentication and OAuth providers, create authentication middleware, and implement JWT-based security with proper session management.",
+        "dependencies": [
+          2
+        ],
+        "testStrategy": "Unit tests for auth components, integration tests for login/logout flows, manual testing of OAuth providers, session persistence verification"
+      },
+      {
+        "id": 4,
+        "title": "Implement Role-Based Access Control System",
+        "status": "pending",
+        "details": "Create role management utilities and hooks for checking user permissions. Implement role-based route guards and component-level access control. Create admin interface for role assignment. Set up database triggers for automatic role assignment. Implement permission constants and validation functions for different user actions.",
+        "description": "Create user role management system with Owner/Admin and Standard User roles, implement permission-based access control, and set up role assignment and validation mechanisms.",
+        "dependencies": [
+          3
+        ],
+        "testStrategy": "Unit tests for permission checking functions, integration tests for role-based access, manual testing of different user role scenarios"
+      },
+      {
+        "id": 5,
+        "title": "Set up Railway Deployment and Dashboard Layout",
+        "status": "pending",
+        "details": "Set up Railway project and configure deployment pipeline. Create environment variables for SUPABASE_URL, SUPABASE_KEY, N8N_URL, MORELOGIN_KEY. Build responsive dashboard layout with sidebar navigation, header, and main content area. Implement role-based navigation menu that shows different options based on user permissions. Create reusable UI components using Tailwind CSS.",
+        "description": "Configure Railway hosting with environment variables, create responsive dashboard layout with role-based navigation, and implement basic UI components for the application foundation.",
+        "dependencies": [
+          4
+        ],
+        "testStrategy": "Deployment verification on Railway, responsive design testing across devices, manual testing of role-based navigation, environment variable validation"
+      }
+    ],
+    "description": "Set up the foundational infrastructure including Next.js application, Supabase backend, Railway deployment, and implement user authentication with role-based access control.",
+    "dependencies": [],
+    "testStrategy": "Unit tests for authentication flows, integration tests for Supabase connection, manual testing of role-based access, deployment verification on Railway"
+  },
+  {
+    "id": 2,
+    "title": "Account Management and MoreLogin Integration",
+    "status": "pending",
+    "details": "Create accounts management interface for linking MoreLogin profiles with proxy/IP rotation support. Implement ADB/Selenium emulation for account warming to avoid bans and Cloudflare re-logins. Build secure storage for Upload-Post API keys (TikTok, Instagram, X, YouTube) and Reddit credentials. Create account status tracking (warming, ready, banned) with background monitoring. Implement velocity controls and randomized delays per account to maintain safety.",
+    "priority": "high",
+    "subtasks": [
+      {
+        "id": 1,
+        "title": "MoreLogin Profile Integration and Account Management Interface",
+        "status": "pending",
+        "details": "Implement MoreLogin API client with authentication, profile creation/management endpoints, and proxy configuration. Build React/Vue components for account listing, profile linking interface, and proxy settings management. Create database schema for storing account-profile relationships and proxy configurations. Implement error handling for MoreLogin API failures and connection issues.",
+        "description": "Create the core account management interface that integrates with MoreLogin API for profile management and proxy/IP rotation support. This includes building the UI components and API connections for linking social media accounts with MoreLogin profiles.",
+        "dependencies": [],
+        "testStrategy": "Mock MoreLogin API responses, test profile linking workflows, validate proxy rotation functionality"
+      },
+      {
+        "id": 2,
+        "title": "Secure API Key and Credentials Storage System",
+        "status": "pending",
+        "details": "Use AES-256 encryption for storing API keys and credentials in database. Implement key derivation using PBKDF2 or Argon2 for master password. Create secure credential management interface with role-based access controls. Build credential validation and testing endpoints to verify API key functionality. Implement credential rotation and expiration tracking.",
+        "description": "Implement encrypted storage system for Upload-Post API keys (TikTok, Instagram, X, YouTube) and Reddit credentials with secure key management and access controls.",
+        "dependencies": [
+          1
+        ],
+        "testStrategy": "Test API key encryption/decryption, validate access controls, test credential validation endpoints"
+      },
+      {
+        "id": 3,
+        "title": "Account Warming System with ADB/Selenium Emulation",
+        "status": "pending",
+        "details": "Implement Selenium WebDriver with stealth plugins and human-like behavior patterns (mouse movements, typing delays, scroll patterns). Create ADB integration for mobile device emulation and app interactions. Build warming workflow engine with configurable actions (login, browse, like, follow). Implement Cloudflare bypass techniques and CAPTCHA handling. Create warming schedule management with randomized timing and actions.",
+        "description": "Develop automated account warming routines using ADB and Selenium to simulate human behavior and avoid account bans and Cloudflare re-logins.",
+        "dependencies": [
+          1,
+          2
+        ],
+        "testStrategy": "Test account warming workflows on test accounts, validate human-like behavior patterns, test Cloudflare bypass effectiveness"
+      },
+      {
+        "id": 4,
+        "title": "Account Status Tracking and Background Monitoring",
+        "status": "pending",
+        "details": "Implement account status state machine (warming, ready, active, suspended, banned). Create background monitoring service that periodically checks account accessibility and health. Build notification system for status changes and account issues. Implement account recovery workflows for suspended accounts. Create dashboard for visualizing account status distribution and health metrics.",
+        "description": "Create comprehensive account status tracking system that monitors account health (warming, ready, banned) with automated background monitoring and alerting.",
+        "dependencies": [
+          2,
+          3
+        ],
+        "testStrategy": "Test status tracking accuracy, validate background monitoring reliability, test notification delivery"
+      },
+      {
+        "id": 5,
+        "title": "Velocity Controls and Safety Management System",
+        "status": "pending",
+        "details": "Create configurable velocity limit engine with per-platform and per-account rate limiting. Implement intelligent delay algorithms with randomization and human-pattern simulation. Build safety scoring system based on account age, activity history, and platform-specific risk factors. Create posting queue management with priority handling and safety checks. Implement emergency brake system to halt activities when risk thresholds are exceeded.",
+        "description": "Implement sophisticated velocity controls and randomized delays per account to maintain posting safety and avoid platform detection algorithms.",
+        "dependencies": [
+          3,
+          4
+        ],
+        "testStrategy": "Test velocity limit enforcement, validate randomized delay patterns, test emergency brake functionality"
+      }
+    ],
+    "description": "Implement social media account management system with MoreLogin profile integration, account warming routines, and API key management for posting services.",
+    "dependencies": [
+      1
+    ],
+    "testStrategy": "Mock MoreLogin API responses, test account warming workflows, validate API key encryption, test velocity limit enforcement"
+  },
+  {
+    "id": 3,
+    "title": "Campaign Creation and AI Content Generation",
+    "status": "pending",
+    "details": "Develop single-page campaign wizard with fields for name, keywords/topics, platform selection, account assignment, and posting cadence. Integrate OpenAI API (GPT-4/3.5) with Grok prompts for generating threads, comments, and video scripts. Implement bulk generation capability (100-500 items/day per campaign). Create content preview and editing interface. Store generated content in Supabase with proper indexing. Add content quality controls and user refinement options using Cursor.ai prompt optimization.",
+    "priority": "medium",
+    "subtasks": [
+      {
+        "id": 1,
+        "title": "Build Campaign Creation Wizard Interface",
+        "status": "pending",
+        "details": "Implement a React component with form validation using libraries like Formik or React Hook Form. Include dropdown selectors for platforms (Twitter, LinkedIn, etc.), multi-select for account assignment, and scheduling options for posting cadence. Add form state management and validation rules for required fields. Style with consistent UI components and responsive design.",
+        "description": "Create a single-page campaign wizard with form fields for campaign name, keywords/topics, platform selection, account assignment, and posting cadence configuration.",
+        "dependencies": [],
+        "testStrategy": "Test form validation, field interactions, and responsive design across different screen sizes"
+      },
+      {
+        "id": 2,
+        "title": "Integrate OpenAI and Grok API Services",
+        "status": "pending",
+        "details": "Create API service modules for both OpenAI and Grok with proper authentication using API keys stored securely in environment variables. Implement retry logic, rate limiting, and error handling for API failures. Create wrapper functions for different content types (threads, comments, video scripts) with appropriate prompt templates. Add API response validation and sanitization.",
+        "description": "Set up API integration with OpenAI (GPT-4/3.5) and Grok APIs for AI-powered content generation with proper authentication and error handling.",
+        "dependencies": [],
+        "testStrategy": "Test API connectivity, authentication, rate limiting, and error scenarios with mock responses"
+      },
+      {
+        "id": 3,
+        "title": "Implement AI Content Generation Engine",
+        "status": "pending",
+        "details": "Create a content generation service that takes campaign parameters (keywords, topics, platform) and generates appropriate prompts for different content types. Implement batch processing for bulk generation (100-500 items/day) with queue management. Add content type templates and prompt optimization using Cursor.ai. Include content variation algorithms to avoid repetitive outputs and implement content quality scoring.",
+        "description": "Build the core content generation system that uses campaign parameters to generate threads, comments, and video scripts through AI APIs with bulk generation capabilities.",
+        "dependencies": [
+          1,
+          2
+        ],
+        "testStrategy": "Test bulk generation performance, content quality and variety, and queue processing under load"
+      },
+      {
+        "id": 4,
+        "title": "Create Content Preview and Editing Interface",
+        "status": "pending",
+        "details": "Develop a content management interface with preview cards for generated content, inline editing capabilities, and approval/rejection workflows. Add content quality indicators, readability scores, and platform-specific formatting previews. Implement batch editing operations, content filtering by type/quality, and user refinement tools. Include undo/redo functionality and content versioning.",
+        "description": "Build an interface for users to preview, edit, and refine AI-generated content before approval, with quality controls and refinement options.",
+        "dependencies": [
+          3
+        ],
+        "testStrategy": "Test editing functionality, preview accuracy, batch operations, and user workflow efficiency"
+      },
+      {
+        "id": 5,
+        "title": "Implement Content Storage and Database Integration",
+        "status": "pending",
+        "details": "Design and implement Supabase database tables for campaigns, generated content, and content metadata with proper relationships and foreign keys. Create indexes for efficient querying by campaign, content type, creation date, and status. Implement CRUD operations for content management, bulk insert operations for generated content, and data archival strategies. Add content search functionality and implement proper data backup and recovery procedures.",
+        "description": "Set up Supabase database schema and storage system for generated content with proper indexing, retrieval, and campaign association.",
+        "dependencies": [
+          4
+        ],
+        "testStrategy": "Test database performance with large datasets, verify data integrity, and validate search and retrieval operations"
+      }
+    ],
+    "description": "Build the campaign creation wizard and integrate AI-powered content generation using OpenAI/Grok APIs for automated text creation across different content types.",
+    "dependencies": [
+      1,
+      2
+    ],
+    "testStrategy": "Test campaign creation flow, validate AI API integration, test bulk generation performance, verify content storage and retrieval"
+  },
+  {
+    "id": 4,
+    "title": "Media Automation and Posting System",
+    "status": "pending",
+    "details": "Integrate n8n workflows for creating video slideshows, image carousels, and AI-generated visuals using existing templates. Store media URLs and assets in Supabase JSON blobs with proper metadata. Build queue system for scheduled posting with delay and proxy scheduling. Implement Upload-Post API integration for TikTok, Instagram, X, and YouTube. Add PRAW library integration for Reddit posting. Create calendar view for content preview and scheduling. Implement retry logic with exponential backoff for failed posts.",
+    "priority": "medium",
+    "subtasks": [
+      {
+        "id": 1,
+        "title": "Implement n8n Workflow Integration for Media Generation",
+        "status": "pending",
+        "details": "Install n8n SDK or REST API client. Create workflow endpoints for triggering media generation workflows. Implement authentication and secure communication with n8n instance. Set up webhook handlers to receive workflow completion notifications. Configure template-based media generation workflows for different content types (slideshows, carousels, AI visuals). Implement error handling for workflow failures and timeout scenarios.",
+        "description": "Set up n8n workflow integration to automate creation of video slideshows, image carousels, and AI-generated visuals using existing templates. Configure workflow triggers and data flow between n8n and the main application.",
+        "dependencies": [],
+        "testStrategy": "Test workflow triggers with sample data, validate media generation outputs, verify webhook notifications and error handling"
+      },
+      {
+        "id": 2,
+        "title": "Build Media Storage System with Supabase Integration",
+        "status": "pending",
+        "details": "Design Supabase table schema for media assets with JSON blob columns for metadata. Implement media upload and storage functions using Supabase Storage API. Create indexing strategy for efficient media retrieval by type, date, and status. Build media metadata management system including file size, dimensions, format, creation date, and associated workflow information. Implement cleanup routines for expired or unused media assets. Add media validation and format conversion capabilities.",
+        "description": "Implement media asset storage system using Supabase to store media URLs, metadata, and assets in JSON blob format. Create database schema and storage management functions.",
+        "dependencies": [
+          1
+        ],
+        "testStrategy": "Test media upload and retrieval operations, validate JSON blob storage and metadata integrity, verify cleanup routines"
+      },
+      {
+        "id": 3,
+        "title": "Develop Queue System for Scheduled Posting",
+        "status": "pending",
+        "details": "Implement job queue using Redis or database-backed queue system. Create scheduling engine that supports delayed execution and recurring posts. Build proxy rotation system for managing multiple posting accounts and avoiding rate limits. Implement queue workers for processing posting jobs with configurable concurrency. Add priority-based job processing and queue monitoring capabilities. Create queue management API endpoints for adding, updating, and canceling scheduled posts. Implement queue persistence and recovery mechanisms for system restarts.",
+        "description": "Build a robust queue system for managing scheduled content posting with delay scheduling, proxy management, and queue processing capabilities.",
+        "dependencies": [
+          2
+        ],
+        "testStrategy": "Test queue job scheduling and execution, validate delay mechanisms, verify proxy rotation and queue persistence"
+      },
+      {
+        "id": 4,
+        "title": "Implement Multi-Platform Posting APIs",
+        "status": "pending",
+        "details": "Integrate Upload-Post API SDK for TikTok, Instagram, X, and YouTube platforms. Install and configure PRAW library for Reddit API integration. Create platform-specific posting adapters that handle different media formats, caption limits, and posting requirements. Implement authentication management for multiple social media accounts per platform. Build unified posting interface that abstracts platform differences. Add media format conversion and optimization for each platform's requirements. Implement rate limiting and API quota management for each platform.",
+        "description": "Integrate with Upload-Post API for TikTok, Instagram, X, and YouTube, plus PRAW library for Reddit posting. Build unified posting interface with platform-specific adaptations.",
+        "dependencies": [
+          3
+        ],
+        "testStrategy": "Test posting to each platform with mock accounts, validate media format conversions, verify authentication and rate limiting"
+      },
+      {
+        "id": 5,
+        "title": "Build Calendar Interface and Retry Logic System",
+        "status": "pending",
+        "details": "Build calendar UI component for visualizing scheduled posts across different time periods (daily, weekly, monthly views). Implement drag-and-drop functionality for rescheduling posts. Create content preview system showing media thumbnails, captions, and posting details. Add filtering and search capabilities for scheduled content. Implement retry logic with exponential backoff algorithm for failed posts. Create failure categorization system (temporary vs permanent failures). Build notification system for posting failures and retry exhaustion. Add manual retry and bulk retry capabilities. Implement comprehensive logging and analytics for posting success rates.",
+        "description": "Create calendar view for content preview and scheduling management, plus implement comprehensive retry logic with exponential backoff for failed posts.",
+        "dependencies": [
+          4
+        ],
+        "testStrategy": "Test calendar interface functionality, validate retry mechanisms with simulated failures, verify notification system and logging accuracy"
+      }
+    ],
+    "description": "Implement n8n workflow integration for automated media creation and build the scheduling/posting system for multi-platform content distribution.",
+    "dependencies": [
+      2,
+      3
+    ],
+    "testStrategy": "Test n8n workflow triggers, validate media generation and storage, test posting APIs with mock accounts, verify scheduling accuracy and retry mechanisms"
+  },
+  {
+    "id": 5,
+    "title": "Lead Capture, Analytics, and Monetization",
+    "status": "pending",
+    "details": "Build keyword monitoring system for comments/replies across platforms. Implement automated DM/reply system with funnel integration. Integrate Typeform and ConvertKit webhooks for lead capture and nurturing. Create analytics dashboard with internal counters for impressions, clicks, conversions, and revenue per campaign. Add filtering by platform and date range. Implement Google Sheets export functionality via n8n. Integrate Whop payment system for subscription management (freemium/premium tiers). Create Owner/Admin panel for subscription oversight and user management.",
+    "priority": "medium",
+    "subtasks": [
+      {
+        "id": 1,
+        "title": "Implement Lead Capture Automation System",
+        "status": "pending",
+        "details": "Create keyword monitoring service that scans comments/replies across social platforms. Implement automated response system that sends DMs or replies based on keyword triggers. Build funnel integration to capture leads and route them through the conversion pipeline. Include rate limiting and anti-spam measures.",
+        "description": "Build automated lead capture system with keyword monitoring across platforms and automated DM/reply functionality integrated with funnel system",
+        "dependencies": [],
+        "testStrategy": "Test keyword detection accuracy, verify automated responses are sent correctly, validate funnel integration captures leads properly"
+      },
+      {
+        "id": 2,
+        "title": "Integrate Typeform and ConvertKit Webhooks",
+        "status": "pending",
+        "details": "Configure Typeform webhook endpoints to receive form submission data. Set up ConvertKit webhook integration for email automation triggers. Create data mapping between platforms to ensure lead information flows correctly. Implement error handling and retry logic for failed webhook calls.",
+        "description": "Set up webhook integrations with Typeform for form submissions and ConvertKit for email marketing automation and lead nurturing workflows",
+        "dependencies": [
+          1
+        ],
+        "testStrategy": "Test webhook endpoints receive data correctly, verify lead data mapping accuracy, test error handling scenarios"
+      },
+      {
+        "id": 3,
+        "title": "Build Analytics Dashboard with Internal Counters",
+        "status": "pending",
+        "details": "Design dashboard UI with key metrics visualization including charts and graphs. Implement internal counters for tracking impressions, clicks, conversions, and revenue per campaign. Add filtering functionality by platform (social media channels) and date ranges. Create real-time data updates and caching for performance.",
+        "description": "Create comprehensive analytics dashboard displaying impressions, clicks, conversions, and revenue metrics with platform and date range filtering capabilities",
+        "dependencies": [
+          1,
+          2
+        ],
+        "testStrategy": "Validate analytics data accuracy against actual events, test filtering functionality, verify real-time updates work correctly"
+      },
+      {
+        "id": 4,
+        "title": "Implement Google Sheets Export via n8n",
+        "status": "pending",
+        "details": "Configure n8n workflow to connect with the analytics system and Google Sheets API. Create export templates for different data types (leads, analytics, campaigns). Implement scheduled exports and on-demand export functionality. Add data formatting and validation before export.",
+        "description": "Set up automated Google Sheets export functionality using n8n workflow automation to export analytics data and lead information",
+        "dependencies": [
+          3
+        ],
+        "testStrategy": "Test export functionality with sample data, verify Google Sheets integration works correctly, validate data formatting and completeness"
+      },
+      {
+        "id": 5,
+        "title": "Integrate Whop Payment System and Admin Panel",
+        "status": "pending",
+        "details": "Integrate Whop API for payment processing and subscription management. Implement freemium and premium tier logic with feature restrictions. Create admin panel with user management, subscription oversight, and revenue tracking. Add subscription status monitoring and automated tier upgrades/downgrades.",
+        "description": "Implement Whop payment integration for subscription management with freemium/premium tiers and create Owner/Admin panel for subscription oversight and user management",
+        "dependencies": [
+          2,
+          3
+        ],
+        "testStrategy": "Test payment processing flows, verify subscription tier restrictions work correctly, test admin panel functionality for user and subscription management"
+      }
+    ],
+    "description": "Implement lead capture automation, analytics dashboard, and Whop payment integration to complete the end-to-end monetization pipeline.",
+    "dependencies": [
+      1,
+      4
+    ],
+    "testStrategy": "Test lead capture workflows, validate analytics data accuracy, test webhook integrations, verify payment processing, test export functionality"
+  }
+]

@@ -3,12 +3,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ContentUploader } from '@/components/content/ContentUploader'
+import { ContentGenerator } from '@/components/content/ContentGenerator'
 import { Video, TrendingUp, Clock, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function ContentPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
+
+  // Fetch user's campaigns
+  const { data: campaigns } = await supabase
+    .from('campaigns')
+    .select('*')
+    .eq('user_id', user?.id)
+    .order('created_at', { ascending: false })
 
   // Fetch user's content posts
   const { data: posts } = await supabase
@@ -98,6 +106,9 @@ export default async function ContentPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Content Generator */}
+      <ContentGenerator campaigns={campaigns || []} />
 
       {/* Content Uploader */}
       <ContentUploader />

@@ -33,13 +33,8 @@ export default function DevicesPage() {
         return
       }
 
-      // Fetch from backend API which queries MoreLogin directly
-      const response = await fetch('http://localhost:3000/api/morelogin/instances', {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        }
-      })
+      // Fetch from Next.js API proxy
+      const response = await fetch('/api/morelogin/instances')
 
       if (!response.ok) {
         throw new Error('Failed to fetch devices')
@@ -91,7 +86,7 @@ export default function DevicesPage() {
 
       toast.info('Creating MoreLogin device...')
 
-      const response = await fetch('http://localhost:3000/api/morelogin/create', {
+      const response = await fetch('/api/morelogin/create', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -148,7 +143,7 @@ export default function DevicesPage() {
       toast.info('Starting warmup session... Open the device viewer to watch!')
 
       // Call warmup endpoint
-      const response = await fetch('http://localhost:3000/api/warmup/execute', {
+      const response = await fetch('/api/warmup/execute', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,

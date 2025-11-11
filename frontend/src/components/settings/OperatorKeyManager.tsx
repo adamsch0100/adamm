@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
 
-const MCP_SERVER_URL = process.env.NEXT_PUBLIC_MCP_SERVER_URL || 'http://localhost:3000'
+// API keys are encrypted using AES-256-GCM server-side
 
 interface OperatorKeyManagerProps {
   service?: string
@@ -71,11 +71,10 @@ export function OperatorKeyManager({ service: initialService, onSuccess }: Opera
         return
       }
 
-      const response = await fetch(`${MCP_SERVER_URL}/api/operator-settings`, {
+      const response = await fetch('/api/operator-settings', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           service,
@@ -208,6 +207,9 @@ export function OperatorKeyManager({ service: initialService, onSuccess }: Opera
     </Dialog>
   )
 }
+
+
+
 
 
 

@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { TrendingUp, Eye, Heart, MessageCircle, Share2, Users, Video } from 'lucide-react'
-import { Platform, PLATFORM_CONFIG } from '@/types'
+import { TrendingUp, Eye, Heart, MessageCircle, Share2, Users, Video, Loader2 } from 'lucide-react'
+import { Platform, PLATFORM_CONFIG, Campaign, Analytics } from '@/types'
+import { toast } from 'sonner'
 
 // Mock data - replace with real data from Supabase
 const viewsData = [
@@ -45,174 +46,273 @@ const platformDistributionData = [
   { name: 'Twitter', value: 3, color: '#1da1f2' }
 ]
 
-const topPerformingPosts = [
-  { id: 1, platform: 'tiktok', title: 'Bitcoin Hits New High 🚀', views: 45000, likes: 3200, engagement: 7.1 },
-  { id: 2, platform: 'instagram', title: 'Ethereum Update', views: 28000, likes: 2100, engagement: 7.5 },
-  { id: 3, platform: 'youtube', title: 'Crypto Trends 2024', views: 18000, likes: 1400, engagement: 7.8 },
-  { id: 4, platform: 'tiktok', title: 'Trading Tips', views: 15000, likes: 1100, engagement: 7.3 },
-  { id: 5, platform: 'instagram', title: 'Market Analysis', views: 12000, likes: 900, engagement: 7.5 }
-]
-
 export default function AnalyticsPage() {
-  const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | 'all'>('7d')
+  const [analytics, setAnalytics] = useState<Analytics[]>([])
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Filters
+  const [selectedCampaign, setSelectedCampaign] = useState<string>('all')
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'all'>('all')
+  const [dateRange, setDateRange] = useState<string>('7d')
 
-  const platforms: (Platform | 'all')[] = ['all', 'tiktok', 'instagram', 'youtube', 'facebook', 'linkedin', 'twitter']
+  useEffect(() => {
+    fetchData()
+  }, [])
 
-  // Calculate totals
-  const totalViews = viewsData[viewsData.length - 1].tiktok + 
-                      viewsData[viewsData.length - 1].instagram + 
-                      viewsData[viewsData.length - 1].youtube +
-                      viewsData[viewsData.length - 1].facebook +
-                      viewsData[viewsData.length - 1].linkedin +
-                      viewsData[viewsData.length - 1].twitter
+  const fetchData = async () => {
+    try {
+      setLoading(true)
 
-  const totalEngagement = engagementData[engagementData.length - 1].likes + 
-                          engagementData[engagementData.length - 1].comments + 
-                          engagementData[engagementData.length - 1].shares
+      // Fetch campaigns for filter dropdown
+      const campaignsResponse = await fetch('/api/campaigns?limit=100')
+      if (campaignsResponse.ok) {
+        const campaignsData = await campaignsResponse.json()
+        setCampaigns(campaignsData.campaigns || [])
+      }
 
-  const totalFollowers = followerGrowthData[followerGrowthData.length - 1].followers
+      // Fetch analytics data
+      await fetchAnalytics()
+    } catch (error) {
+      console.error('Failed to fetch data:', error)
+      toast.error('Failed to load analytics data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchAnalytics = async () => {
+    try {
+      const params = new URLSearchParams()
+      if (selectedCampaign !== 'all') params.append('campaignId', selectedCampaign)
+      if (selectedPlatform !== 'all') params.append('platform', selectedPlatform)
+      params.append('dateRange', dateRange)
+
+      const response = await fetch(`/api/analytics?${params}`)
+      if (response.ok) {
+        const data = await response.json()
+        setAnalytics(data.analytics || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch analytics:', error)
+    }
+  }
+
+  useEffect(() => {
+    if (!loading) {
+      fetchAnalytics()
+    }
+  }, [selectedCampaign, selectedPlatform, dateRange])
+
+  // Transform analytics data for charts
+  const viewsData = analytics.reduce((acc: any[], item) => {
+    const date = new Date(item.recorded_at).toLocaleDateString()
+    const existing = acc.find(d => d.date === date)
+    if (existing) {
+      existing[item.platform] = (existing[item.platform] || 0) + item.impressions
+    } else {
+      acc.push({ date, [item.platform]: item.impressions })
+    }
+    return acc
+  }, [])
+
+  const engagementData = analytics.reduce((acc: any[], item) => {
+    const date = new Date(item.recorded_at).toLocaleDateString()
+    const existing = acc.find(d => d.date === date)
+    if (existing) {
+      existing.likes = (existing.likes || 0) + item.clicks
+      existing.shares = (existing.shares || 0) + item.conversions
+    } else {
+      acc.push({ date, likes: item.clicks, shares: item.conversions, comments: 0 })
+    }
+    return acc
+  }, [])
+
+  const platformDistributionData = Object.entries(
+    analytics.reduce((acc: Record<string, number>, item) => {
+      acc[item.platform] = (acc[item.platform] || 0) + item.impressions
+      return acc
+    }, {})
+  ).map(([platform, value]) => ({
+    name: PLATFORM_CONFIG[platform as Platform]?.name || platform,
+    value,
+    color: PLATFORM_CONFIG[platform as Platform]?.color || '#666'
+  }))
+
+  const totalStats = analytics.reduce((acc, item) => ({
+    impressions: acc.impressions + item.impressions,
+    clicks: acc.clicks + item.clicks,
+    conversions: acc.conversions + item.conversions,
+    revenue: acc.revenue + item.revenue
+  }), { impressions: 0, clicks: 0, conversions: 0, revenue: 0 })
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-white mb-2">Analytics</h1>
-          <p className="text-gray-400">
-            Track performance across all your social platforms
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <Select value={selectedPlatform} onValueChange={(value: Platform | 'all') => setSelectedPlatform(value)}>
-            <SelectTrigger className="w-40 bg-gray-800 border-gray-700 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {platforms.map(p => (
-                <SelectItem key={p} value={p}>
-                  {p === 'all' ? 'All Platforms' : PLATFORM_CONFIG[p as Platform].name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={timeRange} onValueChange={(value: '7d' | '30d' | '90d' | 'all') => setTimeRange(value)}>
-            <SelectTrigger className="w-32 bg-gray-800 border-gray-700 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7d">Last 7 days</SelectItem>
-              <SelectItem value="30d">Last 30 days</SelectItem>
-              <SelectItem value="90d">Last 90 days</SelectItem>
-              <SelectItem value="all">All time</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-black bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+          Analytics
+        </h1>
+        <p className="text-gray-400 mt-1">
+          Track performance across all platforms
+        </p>
       </div>
 
-      {/* Stats Overview */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card className="bg-gray-800 border-gray-700">
+      {/* Filters */}
+      <Card className="card-glass">
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="text-sm text-white mb-2 block">Campaign</label>
+              <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
+                <SelectTrigger className="input-glass">
+                  <SelectValue placeholder="All campaigns" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Campaigns</SelectItem>
+                  {campaigns.map((campaign) => (
+                    <SelectItem key={campaign.id} value={campaign.id}>
+                      {campaign.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm text-white mb-2 block">Platform</label>
+              <Select value={selectedPlatform} onValueChange={(value: Platform | 'all') => setSelectedPlatform(value)}>
+                <SelectTrigger className="input-glass">
+                  <SelectValue placeholder="All platforms" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Platforms</SelectItem>
+                  {Object.entries(PLATFORM_CONFIG).map(([key, config]) => (
+                    <SelectItem key={key} value={key}>
+                      <div className="flex items-center gap-2">
+                        <span>{config.icon}</span>
+                        <span>{config.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm text-white mb-2 block">Date Range</label>
+              <Select value={dateRange} onValueChange={setDateRange}>
+                <SelectTrigger className="input-glass">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7d">Last 7 days</SelectItem>
+                  <SelectItem value="30d">Last 30 days</SelectItem>
+                  <SelectItem value="90d">Last 90 days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-end">
+              <button
+                onClick={fetchAnalytics}
+                className="btn-gradient w-full"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Overview Stats */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="card-glass">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-300">Total Views</CardTitle>
-            <Eye className="h-4 w-4 text-blue-500" />
+            <CardTitle className="text-sm font-medium text-gray-300">Total Impressions</CardTitle>
+            <Eye className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{totalViews.toLocaleString()}</div>
-            <p className="text-xs text-green-500 flex items-center gap-1 mt-1">
-              <TrendingUp className="h-3 w-3" />
-              +24.5% from last week
-            </p>
+            <div className="text-2xl font-bold text-white">{totalStats.impressions.toLocaleString()}</div>
+            <p className="text-xs text-gray-400">Views across all platforms</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gray-800 border-gray-700">
+        <Card className="card-glass">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-300">Engagement</CardTitle>
-            <Heart className="h-4 w-4 text-red-500" />
+            <CardTitle className="text-sm font-medium text-gray-300">Total Clicks</CardTitle>
+            <Heart className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{totalEngagement.toLocaleString()}</div>
-            <p className="text-xs text-green-500 flex items-center gap-1 mt-1">
-              <TrendingUp className="h-3 w-3" />
-              +18.2% from last week
-            </p>
+            <div className="text-2xl font-bold text-white">{totalStats.clicks.toLocaleString()}</div>
+            <p className="text-xs text-gray-400">Engagement interactions</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gray-800 border-gray-700">
+        <Card className="card-glass">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-300">Followers</CardTitle>
-            <Users className="h-4 w-4 text-purple-500" />
+            <CardTitle className="text-sm font-medium text-gray-300">Conversions</CardTitle>
+            <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{totalFollowers.toLocaleString()}</div>
-            <p className="text-xs text-green-500 flex items-center gap-1 mt-1">
-              <TrendingUp className="h-3 w-3" />
-              +39.2% this month
-            </p>
+            <div className="text-2xl font-bold text-white">{totalStats.conversions.toLocaleString()}</div>
+            <p className="text-xs text-gray-400">Goal completions</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gray-800 border-gray-700">
+        <Card className="card-glass">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-300">Avg Engagement</CardTitle>
-            <MessageCircle className="h-4 w-4 text-green-500" />
+            <CardTitle className="text-sm font-medium text-gray-300">Revenue</CardTitle>
+            <Users className="h-4 w-4 text-purple-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">7.4%</div>
-            <p className="text-xs text-green-500 flex items-center gap-1 mt-1">
-              <TrendingUp className="h-3 w-3" />
-              +2.1% from last week
-            </p>
+            <div className="text-2xl font-bold text-white">${totalStats.revenue.toFixed(2)}</div>
+            <p className="text-xs text-gray-400">Total earnings</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Charts */}
       <Tabs defaultValue="views" className="space-y-4">
-        <TabsList className="bg-gray-800 border-gray-700">
-          <TabsTrigger value="views">Views</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="views">Views & Impressions</TabsTrigger>
           <TabsTrigger value="engagement">Engagement</TabsTrigger>
-          <TabsTrigger value="growth">Growth</TabsTrigger>
-          <TabsTrigger value="distribution">Distribution</TabsTrigger>
+          <TabsTrigger value="platforms">Platform Breakdown</TabsTrigger>
         </TabsList>
 
         <TabsContent value="views" className="space-y-4">
-          <Card className="bg-gray-800 border-gray-700">
+          <Card className="card-glass">
             <CardHeader>
-              <CardTitle className="text-white">Views by Platform</CardTitle>
-              <CardDescription className="text-gray-400">
-                Daily views across all platforms
-              </CardDescription>
+              <CardTitle>Views Over Time</CardTitle>
+              <CardDescription>Impressions by platform and date</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={350}>
+              <ResponsiveContainer width="100%" height={400}>
                 <AreaChart data={viewsData}>
-                  <defs>
-                    <linearGradient id="colorTiktok" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#00f2ea" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#00f2ea" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorInstagram" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#e1306c" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#e1306c" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorYoutube" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ff0000" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#ff0000" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="date" stroke="#9ca3af" />
-                  <YAxis stroke="#9ca3af" />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                    labelStyle={{ color: '#fff' }}
-                  />
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
                   <Legend />
-                  <Area type="monotone" dataKey="tiktok" stroke="#00f2ea" fillOpacity={1} fill="url(#colorTiktok)" />
-                  <Area type="monotone" dataKey="instagram" stroke="#e1306c" fillOpacity={1} fill="url(#colorInstagram)" />
-                  <Area type="monotone" dataKey="youtube" stroke="#ff0000" fillOpacity={1} fill="url(#colorYoutube)" />
+                  {Object.keys(PLATFORM_CONFIG).map((platform) => (
+                    <Area
+                      key={platform}
+                      type="monotone"
+                      dataKey={platform}
+                      stackId="1"
+                      stroke={PLATFORM_CONFIG[platform as Platform].color}
+                      fill={PLATFORM_CONFIG[platform as Platform].color}
+                      fillOpacity={0.6}
+                    />
+                  ))}
                 </AreaChart>
               </ResponsiveContainer>
             </CardContent>
@@ -220,135 +320,82 @@ export default function AnalyticsPage() {
         </TabsContent>
 
         <TabsContent value="engagement" className="space-y-4">
-          <Card className="bg-gray-800 border-gray-700">
+          <Card className="card-glass">
             <CardHeader>
-              <CardTitle className="text-white">Engagement Metrics</CardTitle>
-              <CardDescription className="text-gray-400">
-                Likes, comments, and shares over time
-              </CardDescription>
+              <CardTitle>Engagement Metrics</CardTitle>
+              <CardDescription>Clicks and conversions over time</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={engagementData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="date" stroke="#9ca3af" />
-                  <YAxis stroke="#9ca3af" />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                    labelStyle={{ color: '#fff' }}
-                  />
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={engagementData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
                   <Legend />
-                  <Bar dataKey="likes" fill="#ef4444" />
-                  <Bar dataKey="comments" fill="#3b82f6" />
-                  <Bar dataKey="shares" fill="#10b981" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="growth" className="space-y-4">
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-white">Follower Growth</CardTitle>
-              <CardDescription className="text-gray-400">
-                Total followers across all platforms
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={350}>
-                <LineChart data={followerGrowthData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="date" stroke="#9ca3af" />
-                  <YAxis stroke="#9ca3af" />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                    labelStyle={{ color: '#fff' }}
-                  />
-                  <Line type="monotone" dataKey="followers" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 6 }} />
+                  <Line type="monotone" dataKey="likes" stroke="#ef4444" strokeWidth={2} />
+                  <Line type="monotone" dataKey="shares" stroke="#22c55e" strokeWidth={2} />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="distribution" className="space-y-4">
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-white">Platform Distribution</CardTitle>
-              <CardDescription className="text-gray-400">
-                Views by platform (percentage)
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={350}>
-                <PieChart>
-                  <Pie
-                    data={platformDistributionData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={120}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {platformDistributionData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+        <TabsContent value="platforms" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card className="card-glass">
+              <CardHeader>
+                <CardTitle>Platform Distribution</CardTitle>
+                <CardDescription>Impressions by platform</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={platformDistributionData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {platformDistributionData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="card-glass">
+              <CardHeader>
+                <CardTitle>Platform Performance</CardTitle>
+                <CardDescription>Detailed metrics by platform</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {platformDistributionData.map((platform) => (
+                    <div key={platform.name} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: platform.color }}
+                        />
+                        <span className="text-white">{platform.name}</span>
+                      </div>
+                      <span className="text-white font-semibold">{platform.value.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
-
-      {/* Top Performing Posts */}
-      <Card className="bg-gray-800 border-gray-700">
-        <CardHeader>
-          <CardTitle className="text-white">Top Performing Posts</CardTitle>
-          <CardDescription className="text-gray-400">
-            Your best content this week
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {topPerformingPosts.map((post) => (
-              <div key={post.id} className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
-                <div className="flex items-center gap-4">
-                  <div className="p-2 bg-gray-600 rounded-lg">
-                    <Video className="h-6 w-6 text-blue-400" />
-                  </div>
-                  <div>
-                    <div className="font-medium text-white">{post.title}</div>
-                    <div className="text-sm text-gray-400">
-                      {PLATFORM_CONFIG[post.platform as Platform].name}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-6 text-sm">
-                  <div className="text-center">
-                    <div className="text-gray-400">Views</div>
-                    <div className="text-white font-semibold">{post.views.toLocaleString()}</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-gray-400">Likes</div>
-                    <div className="text-white font-semibold">{post.likes.toLocaleString()}</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-gray-400">Engagement</div>
-                    <div className="text-green-400 font-semibold">{post.engagement}%</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

@@ -1,12 +1,19 @@
 {
-  "name": "tiktok-automation-mcp-server",
+  "name": "postpulse-io",
   "version": "1.0.0",
-  "description": "MCP server for n8n TikTok automation workflows",
-  "main": "mcp-server.js",
+  "description": "PostPulse.io - AI-driven social media automation platform",
+  "main": "backend/mcp-server.js",
   "type": "module",
   "scripts": {
-    "start": "node mcp-server.js",
-    "dev": "node --watch mcp-server.js",
+    "start": "node backend/mcp-server.js",
+    "dev": "node --watch backend/mcp-server.js",
+    "dev:full": "concurrently \"npm run dev\" \"npm run dev:frontend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "setup": "node scripts/dev-setup.js",
+    "test": "node tests/integration-test.js",
+    "validate": "node scripts/validate-env.js",
+    "migrate": "node scripts/run-migrations.js",
     "n8n": "n8n start",
     "n8n:tunnel": "n8n start --tunnel"
   },
@@ -34,6 +41,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
+    "concurrently": "^8.2.2",
     "nodemon": "^3.0.2",
     "playwright": "^1.56.1"
   },

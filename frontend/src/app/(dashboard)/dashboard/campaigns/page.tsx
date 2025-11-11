@@ -5,28 +5,31 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { 
-  Plus, 
-  Loader2, 
-  PlayCircle, 
-  CheckCircle2, 
-  XCircle, 
+import {
+  Plus,
+  Loader2,
+  PlayCircle,
+  CheckCircle2,
+  XCircle,
   Clock,
   Eye,
-  Pause
+  Pause,
+  Sparkles,
+  BarChart3
 } from 'lucide-react'
 import type { Campaign } from '@/types'
 import { formatDistanceToNow } from 'date-fns'
 import { CreateCampaignModal } from '@/components/campaigns/CreateCampaignModal'
-import { CampaignDetailView } from '@/components/campaigns/CampaignDetailView'
+import { CampaignQueueView } from '@/components/campaigns/CampaignQueueView'
 
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null)
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -48,11 +51,7 @@ export default function CampaignsPage() {
         return
       }
 
-      const response = await fetch('http://localhost:3000/api/campaigns?limit=50', {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        }
-      })
+      const response = await fetch('/api/campaigns?limit=50')
 
       if (!response.ok) {
         throw new Error('Failed to fetch campaigns')
@@ -72,22 +71,16 @@ export default function CampaignsPage() {
 
   const getStatusIcon = (status: Campaign['status']) => {
     switch (status) {
-      case 'creating':
-      case 'generating_script':
-      case 'generating_videos':
-      case 'downloading':
-      case 'posting':
+      case 'draft':
+        return <Clock className="h-4 w-4 text-gray-400" />
+      case 'active':
         return <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
-      case 'pending_review':
-        return <Eye className="h-4 w-4 text-yellow-400" />
-      case 'approved':
-        return <CheckCircle2 className="h-4 w-4 text-green-400" />
+      case 'paused':
+        return <Pause className="h-4 w-4 text-yellow-400" />
       case 'completed':
         return <CheckCircle2 className="h-4 w-4 text-green-400" />
       case 'failed':
         return <XCircle className="h-4 w-4 text-red-400" />
-      case 'cancelled':
-        return <Pause className="h-4 w-4 text-gray-400" />
       default:
         return <Clock className="h-4 w-4 text-gray-400" />
     }
@@ -95,29 +88,19 @@ export default function CampaignsPage() {
 
   const getStatusBadge = (status: Campaign['status']) => {
     const variants: Record<Campaign['status'], string> = {
-      creating: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
-      generating_script: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
-      generating_videos: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
-      downloading: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
-      pending_review: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
-      approved: 'bg-green-500/10 text-green-400 border-green-500/30',
-      posting: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
+      draft: 'bg-gray-500/10 text-gray-400 border-gray-500/30',
+      active: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+      paused: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
       completed: 'bg-green-500/10 text-green-400 border-green-500/30',
-      failed: 'bg-red-500/10 text-red-400 border-red-500/30',
-      cancelled: 'bg-gray-500/10 text-gray-400 border-gray-500/30'
+      failed: 'bg-red-500/10 text-red-400 border-red-500/30'
     }
 
     const labels: Record<Campaign['status'], string> = {
-      creating: 'Creating',
-      generating_script: 'Generating Script',
-      generating_videos: 'Generating Videos',
-      downloading: 'Downloading',
-      pending_review: 'Pending Review',
-      approved: 'Approved',
-      posting: 'Posting',
+      draft: 'Draft',
+      active: 'Active',
+      paused: 'Paused',
       completed: 'Completed',
-      failed: 'Failed',
-      cancelled: 'Cancelled'
+      failed: 'Failed'
     }
 
     return (
@@ -131,12 +114,117 @@ export default function CampaignsPage() {
   }
 
   if (selectedCampaignId) {
+    const campaign = campaigns.find(c => c.id === selectedCampaignId)
+    if (!campaign) {
+      return (
+        <div className="space-y-6 p-6">
+          <Button variant="outline" onClick={() => setSelectedCampaignId(null)}>
+            ← Back to Campaigns
+          </Button>
+          <div className="text-center text-gray-400">Campaign not found</div>
+        </div>
+      )
+    }
+
     return (
-      <CampaignDetailView
-        campaignId={selectedCampaignId}
-        onBack={() => setSelectedCampaignId(null)}
-        onRefresh={fetchCampaigns}
-      />
+      <div className="space-y-6 p-6">
+        <div className="flex items-center gap-4">
+          <Button variant="outline" onClick={() => setSelectedCampaignId(null)}>
+            ← Back to Campaigns
+          </Button>
+          <div>
+            <h1 className="text-3xl font-black bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+              {campaign.name}
+            </h1>
+            <div className="flex items-center gap-2 mt-2">
+              {getStatusBadge(campaign.status)}
+            </div>
+          </div>
+        </div>
+
+        <Tabs defaultValue="details" className="w-full">
+          <TabsList>
+            <TabsTrigger value="details">Campaign Details</TabsTrigger>
+            <TabsTrigger value="queue">Posting Queue</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="details" className="space-y-6">
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card className="card-glass">
+                <CardHeader>
+                  <CardTitle className="text-white">Campaign Info</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-300">Keywords</label>
+                    <p className="text-white mt-1">{campaign.keywords || 'No keywords set'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-300">Topics</label>
+                    <p className="text-white mt-1">{campaign.topics || 'No topics set'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-300">Target Platforms</label>
+                    <div className="flex gap-2 mt-1">
+                      {campaign.platforms?.map((platform) => (
+                        <Badge key={platform} variant="outline">
+                          {platform}
+                        </Badge>
+                      )) || 'No platforms selected'}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-300">Status</label>
+                    <div className="mt-1">{getStatusBadge(campaign.status)}</div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="card-glass">
+                <CardHeader>
+                  <CardTitle className="text-white">Generated Content</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {campaign.content_json ? (
+                    <pre className="text-sm text-gray-300 whitespace-pre-wrap bg-gray-800 p-3 rounded max-h-64 overflow-y-auto">
+                      {JSON.stringify(campaign.content_json, null, 2)}
+                    </pre>
+                  ) : (
+                    <div className="text-center py-8 text-gray-400">
+                      <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>No content generated yet</p>
+                      <p className="text-sm mt-1">Use the Content page to generate content for this campaign</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="queue" className="space-y-6">
+            <CampaignQueueView campaignId={selectedCampaignId!} />
+          </TabsContent>
+
+          <TabsContent value="analytics" className="space-y-6">
+            <Card className="card-glass">
+              <CardHeader>
+                <CardTitle className="text-white">Campaign Analytics</CardTitle>
+                <CardDescription className="text-gray-400">
+                  Performance metrics for this campaign
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8 text-gray-400">
+                  <BarChart3 className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>Analytics coming soon</p>
+                  <p className="text-sm mt-1">Track impressions, clicks, and conversions</p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
     )
   }
 
@@ -161,22 +249,22 @@ export default function CampaignsPage() {
         </Button>
       </div>
 
-      {/* Active Campaigns Summary */}
+      {/* Campaign Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="card-glass">
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-white">
-              {campaigns.filter(c => ['creating', 'generating_script', 'generating_videos', 'downloading', 'posting'].includes(c.status)).length}
+              {campaigns.length}
             </div>
-            <div className="text-sm text-gray-400 mt-1">Active Campaigns</div>
+            <div className="text-sm text-gray-400 mt-1">Total Campaigns</div>
           </CardContent>
         </Card>
         <Card className="card-glass">
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-yellow-400">
-              {campaigns.filter(c => c.status === 'pending_review').length}
+            <div className="text-2xl font-bold text-blue-400">
+              {campaigns.filter(c => c.status === 'active').length}
             </div>
-            <div className="text-sm text-gray-400 mt-1">Pending Review</div>
+            <div className="text-sm text-gray-400 mt-1">Active</div>
           </CardContent>
         </Card>
         <Card className="card-glass">
@@ -190,9 +278,9 @@ export default function CampaignsPage() {
         <Card className="card-glass">
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-gray-400">
-              {campaigns.reduce((sum, c) => sum + (c.total_posted || 0), 0)}
+              {campaigns.filter(c => c.status === 'draft').length}
             </div>
-            <div className="text-sm text-gray-400 mt-1">Total Posts</div>
+            <div className="text-sm text-gray-400 mt-1">Drafts</div>
           </CardContent>
         </Card>
       </div>
@@ -231,58 +319,24 @@ export default function CampaignsPage() {
                       {campaign.name}
                     </h3>
                     <p className="text-gray-400 text-sm">
-                      Topic: {campaign.topic}
+                      Topics: {campaign.topics || 'No topics set'}
                     </p>
                   </div>
                   {getStatusBadge(campaign.status)}
                 </div>
 
-                {/* Progress Bar */}
-                {['creating', 'generating_script', 'generating_videos', 'downloading', 'posting'].includes(campaign.status) && (
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-gray-400">
-                        {campaign.current_step || 'Processing...'}
-                      </span>
-                      <span className="text-sm font-medium text-white">
-                        {campaign.progress}%
-                      </span>
-                    </div>
-                    <Progress value={campaign.progress} className="h-2" />
-                  </div>
-                )}
-
                 {/* Campaign Details */}
                 <div className="flex items-center gap-6 text-sm text-gray-400">
                   <span>
-                    {campaign.video_count} video{campaign.video_count !== 1 ? 's' : ''}
+                    Platforms: {campaign.platforms?.length || 0}
                   </span>
                   <span>
-                    {campaign.target_accounts.length} account{campaign.target_accounts.length !== 1 ? 's' : ''}
+                    Keywords: {campaign.keywords || 'None'}
                   </span>
-                  {campaign.total_posted > 0 && (
-                    <span className="text-green-400">
-                      {campaign.total_posted} posted
-                    </span>
-                  )}
-                  {campaign.total_failed > 0 && (
-                    <span className="text-red-400">
-                      {campaign.total_failed} failed
-                    </span>
-                  )}
                   <span className="ml-auto">
                     {formatDistanceToNow(new Date(campaign.created_at), { addSuffix: true })}
                   </span>
                 </div>
-
-                {/* Pending Review Notice */}
-                {campaign.status === 'pending_review' && (
-                  <div className="mt-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                    <p className="text-sm text-yellow-400">
-                      🎬 Videos are ready for review. Click to preview and approve.
-                    </p>
-                  </div>
-                )}
               </CardContent>
             </Card>
           ))}
